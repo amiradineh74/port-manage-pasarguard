@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
-const Jalali=require('../app/jalali.js');
+const realJalali=require('../app/jalali.js');
 const elements=new Map();
 function elem(id){
  if(!elements.has(id)){
@@ -12,6 +12,13 @@ function elem(id){
  }
  return elements.get(id);
 }
+const Jalali={...realJalali,attach(field,displayId){
+  return {
+    set(value){elem(field).value=value;elem(displayId).value=realJalali.label(value);},
+    clear(){elem(field).value='';elem(displayId).value='';},
+    get(){return elem(field).value;}
+  };
+}};
 const storage=new Map();
 const daily=[
  {period:'2026-10-14',node_id:3,node_name:'Turkey',provider:'A',down:2000000000,up:500000000,cost:120.234,historical_cost:15},
