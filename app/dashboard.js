@@ -288,11 +288,16 @@ function renderExpenses(){
  const table=$('expenses-table');
  table.innerHTML=items.map(e=>{
   const bounds=Jalali.label(e.start_date)+(e.end_date?' تا '+Jalali.label(e.end_date):' — بدون پایان');
+  const ratio=(e.breakdown||[]).map(x=>x.frequency==='once'
+    ? 'یکباره در تاریخ پرداخت'
+    : persianDigits(x.covered_days)+' روز از '+persianDigits(x.month_days)+
+      ' روز ماه میلادی '+persianDigits(x.month)).join(' + ')||'خارج از بازه گزارش';
   return '<tr><td><strong>'+escapeHtml(e.label)+'</strong><span class="sub">'+escapeHtml(e.category)+
    (e.note?' · '+escapeHtml(e.note):'')+'</span></td><td>'+escapeHtml(expenseName(e))+'</td>'+
    '<td>'+(e.frequency==='monthly'?'ماهانه':'یکباره')+'</td>'+
    '<td class="money">'+money(e.amount_rial/10)+'</td>'+
-   '<td class="money">'+money(e.period_rial/10)+'</td><td>'+escapeHtml(bounds)+'</td>'+
+   '<td class="money">'+money(e.period_rial/10)+'<span class="expense-prorate">'+
+    escapeHtml(ratio)+'</span></td><td>'+escapeHtml(bounds)+'</td>'+
    '<td><div class="cost-actions"><button type="button" class="edit-expense minor" data-id="'+e.id+
    '">ویرایش</button><button type="button" class="delete-expense minor" data-id="'+e.id+
    '">حذف</button></div></td></tr>';
