@@ -74,7 +74,7 @@ def list_nodes(panel_container, panel_python):
 def choose_nodes(cfg, nodes):
     """Require explicit node choice; selection is bound to stable node IDs."""
     available={n['id'] for n in nodes}
-    print('\\n=== Available PasarGuard nodes ===')
+    print('\n=== Available PasarGuard nodes ===')
     for node in nodes:
         print('ID %s: %s' % (node['id'],node['name']))
     if cfg.get('node_ips'):
