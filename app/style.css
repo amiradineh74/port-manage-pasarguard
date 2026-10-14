@@ -180,3 +180,7 @@ body dialog h2{padding-bottom:8px;border-bottom:1px solid var(--line)}
  #expenses .section-head button{width:100%;min-height:44px}
  #expense-dialog .jcalendar{min-width:260px}
 }
+
+.cost-header-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.cost-header-actions a,.cost-header-actions button{min-height:42px;display:inline-flex;align-items:center}
+@media(max-width:550px){.cost-header-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.cost-header-actions a,.cost-header-actions button{width:100%;text-align:center;justify-content:center}}
