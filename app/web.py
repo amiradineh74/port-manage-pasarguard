@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlsplit
 from zoneinfo import ZoneInfo
 
 from storage import connect
+from fixed_costs import validate_expense, expenses_report, fixed_total
 
 CFG = None
 ROOT = Path(__file__).resolve().parent
@@ -176,6 +177,7 @@ def dashboard(params):
             for col in v:v[col]+=p[col]
         total={x:sum(p[x] for p in combined if p['enabled'])
                for x in ('down','up','billed','cost','historical_cost')}
+        fixed_expenses=expenses_report(db,lo,hi)
         return {'ports':combined,'daily':[dict(t) for t in times],
                 'daily_by_provider':daily_by_provider,
                 'hourly_by_provider':hourly_by_provider,
@@ -184,7 +186,9 @@ def dashboard(params):
                 'total':total,'period':{'from':lo,'to':hi},
                 'last_run':dict(last) if last else None,
                 'title':preferences['title'],'currency':preferences['currency'],
-                'timezone':preferences['timezone']}
+                'timezone':preferences['timezone'],
+                'fixed_expenses':fixed_expenses,
+                'fixed_expenses_total_rial':fixed_total(fixed_expenses)}
 
 
 def csrf_for(token):return mac('csrf:'+token)
@@ -299,6 +303,46 @@ class Handler(BaseHTTPRequestHandler):
                                 DO UPDATE SET enabled=excluded.enabled''',
                                 (node_id,port,int(port in visible)))
                 return self.send_json({'ok':True,'message':'پورت‌های نمایشی ذخیره شدند.'})
+            except (ValueError,TypeError,KeyError) as exc:
+                return self.send_json({'error':str(exc)},400)
+        if path=='/api/fixed-expense':
+            try:
+                obj=json.loads(self.read_body())
+                with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
+                    node_ids={r['node_id'] for r in db.execute('SELECT DISTINCT node_id FROM port_state')}
+                    detail=validate_expense(obj,node_ids)
+                    record_id=obj.get('id',None)
+                    if record_id is not None and (type(record_id) is not int or record_id<=0):
+                        raise ValueError('شناسه هزینه نامعتبر است')
+                    columns=['label','category','scope','node_id','provider','frequency',
+                             'amount_rial','start_date','end_date','note']
+                    with db:
+                        if record_id:
+                            exists=db.execute('SELECT 1 FROM fixed_expenses WHERE id=?',(record_id,)).fetchone()
+                            if not exists:raise ValueError('هزینه پیدا نشد')
+                            values=[detail[k] for k in columns]
+                            values.append(record_id)
+                            db.execute('UPDATE fixed_expenses SET '+
+                                       ','.join(k+'=?' for k in columns)+' WHERE id=?',values)
+                            expense_id=record_id
+                        else:
+                            db.execute('INSERT INTO fixed_expenses ('+','.join(columns)+
+                                       ') VALUES ('+','.join('?' for _ in columns)+')',
+                                       [detail[k] for k in columns])
+                            expense_id=db.execute('SELECT last_insert_rowid()').fetchone()[0]
+                return self.send_json({'ok':True,'id':expense_id})
+            except (ValueError,TypeError,KeyError,OverflowError) as exc:
+                return self.send_json({'error':str(exc)},400)
+        if path=='/api/fixed-expense/delete':
+            try:
+                obj=json.loads(self.read_body())
+                expense_id=obj.get('id') if type(obj) is dict else None
+                if type(expense_id) is not int or expense_id<=0:raise ValueError('شناسه نامعتبر است')
+                with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
+                    with db:
+                        removed=db.execute('DELETE FROM fixed_expenses WHERE id=?',(expense_id,))
+                    if removed.rowcount!=1:raise ValueError('هزینه پیدا نشد')
+                return self.send_json({'ok':True})
             except (ValueError,TypeError,KeyError) as exc:
                 return self.send_json({'error':str(exc)},400)
         if path=='/api/display-settings':
