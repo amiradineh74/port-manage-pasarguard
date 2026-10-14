@@ -126,9 +126,11 @@ function renderProviderPanels(){
     escapeHtml(title)+'</strong><small>دانلود '+traffic(v.down)+' · آپلود '+traffic(v.up)+
     '</small><small>مصرف مشمول هزینه '+traffic(v.billed)+'</small>'+
     '<small>ترافیک: '+money(v.cost)+'</small>'+
-    '<small>هزینه ثابت مستقیم: '+money((state.fixed_expenses||[]).filter(e=>
-      selectedNode==='all'&&(name==='__all__'||(e.scope==='provider'&&e.provider===name))&&
-      (name!=='__all__'||true)).reduce((sum,e)=>sum+Number(e.period_rial||0),0)/10)+'</small></button>';
+    '<small>هزینه ثابت تخصیص‌یافته: '+money((state.fixed_expenses||[]).filter(e=>
+      name==='__all__'
+        ? (selectedNode==='all'||(e.scope==='node'&&e.node_id===Number(selectedNode)))
+        : (selectedNode==='all'&&e.scope==='provider'&&e.provider===name)
+      ).reduce((sum,e)=>sum+Number(e.period_rial||0),0)/10)+'</small></button>';
  }).join('');
  document.querySelectorAll('.provider-button').forEach(b=>b.addEventListener('click',()=>{
   selectedProvider=b.dataset.provider;render();
