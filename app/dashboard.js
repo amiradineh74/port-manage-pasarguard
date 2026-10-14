@@ -250,8 +250,11 @@ function openEdit(node,port){const p=state.ports.find(x=>x.node_id===node&&x.por
  $('editing').textContent=p.port+' / '+p.node_name; $('node_id').value=node; $('port').value=port;
  $('port_title').value=p.title; $('provider').value=p.provider; $('rate').value=p.price_per_gb*multiplier();
  $('rate-unit').textContent=unit();
+ $('rate').step=isRial()?'1':'0.01';
+ if(isRial())$('rate').value=Math.round(p.price_per_gb*10);
  $('direction').value=p.bill_direction;$('notes').value=p.notes;$('enabled').checked=!!p.enabled;
- $('since').value=p.billing_since?p.billing_since.slice(0,16):'';
+ if(p.billing_since){sincePicker.set(p.billing_since.slice(0,10));$('since-time').value=p.billing_since.slice(11,16)||'00:00';}
+ else{sincePicker.clear();$('since-time').value='00:00';}
  $('edit').showModal();}
 async function reload(){try{
  const url='/api/dashboard?'+new URLSearchParams({from:$('from').value,to:$('to').value});
@@ -266,13 +269,26 @@ async function reload(){try{
 async function save(e){e.preventDefault();try{
  const body={node_id:Number($('node_id').value),port:Number($('port').value),title:$('port_title').value,
   provider:$('provider').value,price_per_gb:Number($('rate').value)/multiplier(),bill_direction:$('direction').value,
-  billing_since:$('since').value?new Date($('since').value+'Z').toISOString():'',
+  billing_since:$('since').value?new Date($('since').value+'T'+($('since-time').value||'00:00')+':00Z').toISOString():'',
   notes:$('notes').value,enabled:$('enabled').checked};
  const r=await fetch('/api/metadata',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':state.csrf},body:JSON.stringify(body)});
  const resp=await r.json();if(!r.ok)throw Error(resp.error||'خطا');$('edit').close();await reload();
  }catch(e){alert(e.message);}}
 function today(){const d=new Date();return d.toISOString().slice(0,10);}
+const themes=new Set(['night','graphite','arctic','forest','sunset']);
+function applyTheme(name){
+ const key=themes.has(name)?name:'night';
+ document.body.dataset.theme=key;
+ $('theme-select').value=key;
+ try{localStorage.setItem('pgtraffic-theme',key);}catch(e){}
+}
+let initialTheme='night';
+try{initialTheme=localStorage.getItem('pgtraffic-theme')||'night';}catch(e){}
+applyTheme(initialTheme);
+$('theme-select').addEventListener('change',()=>applyTheme($('theme-select').value));
 const initialDay=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tehran'}).format(new Date());
+const sincePicker=Jalali.attach('since','since-date-label','since-calendar');
+$('since-clear').addEventListener('click',()=>{sincePicker.clear();$('since-time').value='00:00';});
 const rangeTo=Jalali.attach('to','to-label','to-calendar',reload);
 const rangeFrom=Jalali.attach('from','from-label','from-calendar',reload);
 rangeTo.set(initialDay);
