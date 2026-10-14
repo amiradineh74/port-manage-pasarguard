@@ -84,7 +84,7 @@ docker exec pasarguard-pasarguard-1 /code/.venv/bin/python -c \
 
 ## نصب مرحله‌به‌مرحله از GitHub
 
-این دستورات پس از منتشرشدن فایل‌ها در مخزن GitHub قابل اجرا هستند.
+این دستورات از همین مخزن عمومی GitHub قابل اجرا هستند.
 
 ۱. مخزن را **روی همان سرور اصلی پنل** دریافت کنید؛ نه روی آلمان یا ترکیه:
 
@@ -176,7 +176,7 @@ sudo systemctl disable --now pgtraffic-collect.timer
 از کپی مخزن کلون‌شده:
 
 ```bash
-cd /root/pasarguard-traffic-monitor
+cd /root/port-manage-pasarguard
 git pull --ff-only
 sudo bash update.sh
 ```
