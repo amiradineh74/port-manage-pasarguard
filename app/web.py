@@ -57,6 +57,10 @@ def display_preferences(db):
               'timezone':CFG.get('timezone','Asia/Tehran')}
     values={r['key']:r['value'] for r in
             db.execute("SELECT key,value FROM settings WHERE key IN ('display_title','display_currency','display_timezone')")}
+    # Legacy installations used Toman as their default display label. Show Rial by
+    # default without changing the stored Toman rates or any historical snapshots.
+    if 'display_currency' not in values and defaults['currency'] in ('Toman','تومان'):
+        defaults['currency']='ریال'
     return {key:values.get('display_'+key,default) for key,default in defaults.items()}
 
 
@@ -130,6 +134,37 @@ def dashboard(params):
          (CFG.get('default_bill_direction','downlink'),
           CFG.get('default_bill_direction','downlink'),
           CFG.get('default_price_per_gb',0),begin,end)).fetchall()
+        # Per-provider UTC buckets for historical trend and cost drilldowns.
+        # Rates/directions in this chart match the current-price estimate.
+        provider_time_query = '''SELECT substr(s.collected_at,1,BUCKET_LEN) period,
+          COALESCE(NULLIF(m.provider,''),'بدون ارائه‌دهنده') provider,
+          SUM(s.delta_down) down, SUM(s.delta_up) up,
+          SUM(CASE COALESCE(m.bill_direction,?)
+            WHEN 'downlink' THEN s.delta_down
+            WHEN 'uplink' THEN s.delta_up
+            ELSE s.delta_up+s.delta_down END) billed,
+          SUM((CASE COALESCE(m.bill_direction,?)
+            WHEN 'downlink' THEN s.delta_down
+            WHEN 'uplink' THEN s.delta_up
+            ELSE s.delta_up+s.delta_down END)
+            * COALESCE(m.price_per_gb,?) / 1000000000.0) cost,
+          SUM(s.cost) historical_cost
+          FROM samples s LEFT JOIN metadata m
+            ON m.node_id=s.node_id AND m.port=s.port
+          WHERE s.collected_at>=? AND s.collected_at<?
+            AND COALESCE(m.enabled,1)=1
+            AND (m.billing_since IS NULL OR m.billing_since='' OR s.collected_at>=m.billing_since)
+          GROUP BY period,provider ORDER BY period,provider'''
+        provider_params=(CFG.get('default_bill_direction','downlink'),
+                         CFG.get('default_bill_direction','downlink'),
+                         CFG.get('default_price_per_gb',0),begin,end)
+        daily_by_provider=[dict(row) for row in db.execute(
+            provider_time_query.replace('BUCKET_LEN','10'),provider_params).fetchall()]
+        # Hourly drilldown is useful for short periods only; avoid transferring
+        # tens of thousands of groups for year-long reports.
+        show_hourly=(date.fromisoformat(hi)-date.fromisoformat(lo)).days<=31
+        hourly_by_provider=[dict(row) for row in db.execute(
+            provider_time_query.replace('BUCKET_LEN','13'),provider_params).fetchall()] if show_hourly else []
         last=db.execute('SELECT collected_at,node_count,sample_count,errors_json FROM poll_runs ORDER BY id DESC LIMIT 1').fetchone()
         providers={}
         for p in combined:
@@ -140,7 +175,11 @@ def dashboard(params):
             for col in v:v[col]+=p[col]
         total={x:sum(p[x] for p in combined if p['enabled'])
                for x in ('down','up','billed','cost','historical_cost')}
-        return {'ports':combined,'daily':[dict(t) for t in times], 'providers':providers,
+        return {'ports':combined,'daily':[dict(t) for t in times],
+                'daily_by_provider':daily_by_provider,
+                'hourly_by_provider':hourly_by_provider,
+                'hourly_available':show_hourly,
+                'providers':providers,
                 'total':total,'period':{'from':lo,'to':hi},
                 'last_run':dict(last) if last else None,
                 'title':preferences['title'],'currency':preferences['currency'],
@@ -269,8 +308,8 @@ class Handler(BaseHTTPRequestHandler):
                 tz=obj.get('timezone')
                 if type(title) is not str or not 1<=len(title.strip())<=100:
                     raise ValueError('عنوان معتبر نیست')
-                if type(currency) is not str or not 1<=len(currency.strip())<=20:
-                    raise ValueError('واحد پول معتبر نیست')
+                if currency not in ('ریال','تومان','Toman','Rial','IRR'):
+                    raise ValueError('واحد پول باید ریال یا تومان باشد')
                 if type(tz) is not str or not 1<=len(tz)<=80:
                     raise ValueError('منطقه زمانی معتبر نیست')
                 try: ZoneInfo(tz)
