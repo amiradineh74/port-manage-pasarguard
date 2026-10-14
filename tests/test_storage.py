@@ -32,6 +32,17 @@ class StorageTests(unittest.TestCase):
         self.put('B',300,300,'2026-10-01T00:02:00+00:00')
         self.assertEqual([r[0] for r in self.db.execute('SELECT event FROM samples')],['baseline','counter_reset','tag_changed,baseline'])
         self.assertEqual(self.db.execute('SELECT total_down FROM port_state').fetchone()[0],20)
+    def test_sparse_history_keeps_last_seen_and_future_bytes(self):
+        self.cfg['sparse_samples']=True
+        self.put('A',10,100,'2026-10-01T00:00:00+00:00')
+        self.put('A',10,100,'2026-10-01T00:01:00+00:00')
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM samples').fetchone()[0],1)
+        seen=self.db.execute('SELECT last_seen FROM port_state').fetchone()[0]
+        self.assertEqual(seen,'2026-10-01T00:01:00+00:00')
+        self.put('A',30,200,'2026-10-01T00:02:00+00:00')
+        self.assertEqual([r[0] for r in self.db.execute('SELECT delta_down FROM samples ORDER BY id')],[0,100])
+        self.assertEqual(self.db.execute('SELECT total_down FROM port_state').fetchone()[0],100)
+
     def test_missing_keeps_previous_baseline(self):
         self.put('A',100,200,'2026-10-01T00:00:00+00:00')
         self.put('A',None,300,'2026-10-01T00:01:00+00:00')
