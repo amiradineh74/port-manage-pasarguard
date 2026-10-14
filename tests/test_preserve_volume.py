@@ -19,6 +19,8 @@ class PreserveVolumeTests(unittest.TestCase):
                 sample(1000000010,'2026-10-14T00:01:00+00:00')
                 db.execute("INSERT INTO metadata (node_id,port,provider,price_per_gb) VALUES(7,2053,'example',850)")
                 db.execute("INSERT INTO settings(key,value) VALUES('display_currency','ریال')")
+                db.execute("""INSERT INTO fixed_expenses(label,category,scope,provider,frequency,amount_rial,start_date)
+                   VALUES('Shared panel','panel','general','','monthly',50000,'2026-10-01')""")
                 db.commit()
                 before=[tuple(x) for x in db.execute(
                   'SELECT collected_at,node_id,port,raw_down,delta_down,delta_up FROM samples ORDER BY id')]
@@ -27,12 +29,14 @@ class PreserveVolumeTests(unittest.TestCase):
                     db.execute('UPDATE samples SET bill_bytes=0,rate_snapshot=0,cost=0')
                     db.execute('DELETE FROM metadata')
                     db.execute('DELETE FROM settings')
+                    db.execute('DELETE FROM fixed_expenses')
                     db.execute('DELETE FROM poll_runs')
                 after=[tuple(x) for x in db.execute(
                   'SELECT collected_at,node_id,port,raw_down,delta_down,delta_up FROM samples ORDER BY id')]
                 self.assertEqual(before,after)
                 self.assertEqual(dict(db.execute('SELECT * FROM port_state').fetchone()),previous)
                 self.assertEqual(db.execute('SELECT COUNT(*) FROM metadata').fetchone()[0],0)
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM fixed_expenses').fetchone()[0],0)
                 self.assertEqual(db.execute('SELECT COALESCE(SUM(cost),0) FROM samples').fetchone()[0],0)
                 # Next sample must add its delta, rather than treating history as a fresh baseline.
                 sample(1500000010,'2026-10-14T00:03:00+00:00')
