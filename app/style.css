@@ -16,3 +16,14 @@
 .prefs-form input{width:100%}
 .prefs-form button{min-height:42px}
 @media(max-width:490px){.port-checks{grid-template-columns:repeat(2,1fr)}.node-form .buttons button{flex:1 1 140px}}
+
+/* Per-provider interactive analytics */
+.provider-button{display:flex;flex-direction:column;text-align:right;align-items:stretch;gap:3px;white-space:normal;min-height:130px;min-width:205px;flex:1 1 205px}
+.provider-button:hover{background:#1d3450;border-color:var(--blue)}
+.provider-button.selected{outline:2px solid var(--teal);outline-offset:2px;background:#173840}
+.provider-button:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
+#provider-detail{margin:16px 0 0;font-size:13px;line-height:2}
+.legend select{max-width:145px;min-width:110px;margin-right:6px}
+.chart svg{height:auto;min-height:220px}
+#traffic-chart-caption{margin-top:5px}
+@media(max-width:620px){.provider-button{min-width:145px;flex:1 1 145px}.chart{overflow-x:auto}.chart svg{min-width:500px}}
