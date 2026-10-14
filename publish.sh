@@ -1,147 +1,111 @@
 #!/usr/bin/env bash
-# Public HTTPS for the standalone traffic dashboard, without changing PasarGuard.
-# Caddy runs in a dedicated monitor-only systemd service.
+# Publish only the independent traffic dashboard via plain HTTP on an IPv4:port.
+# This DOES NOT modify PasarGuard, its containers, user accounting, or the firewall.
 set -Eeuo pipefail
 
 fail() { echo "ERROR: $*" >&2; exit 1; }
-[[ $EUID == 0 ]] || fail 'Run this command as root or with sudo.'
-for cmd in python3 ss getent systemctl install; do
+[[ $EUID == 0 ]] || fail 'Run as root or with sudo.'
+for cmd in python3 systemctl ss curl mktemp cp mv chmod; do
   command -v "$cmd" >/dev/null 2>&1 || fail "Missing required command: $cmd"
 done
 
 DEFAULT_DIR="${PGTM_DEFAULT_DIR:-/opt/pg-traffic-monitor}"
-read -r -p "Existing installation directory [$DEFAULT_DIR]: " DIR
+read -r -p "Existing monitoring installation directory [$DEFAULT_DIR]: " DIR
 DIR="${DIR:-$DEFAULT_DIR}"
 [[ "$DIR" =~ ^/[a-zA-Z0-9_./-]+$ && "$DIR" != '/' ]] || fail 'Invalid installation directory.'
-[[ -f "$DIR/config.json" && -f "$DIR/app/web.py" ]] || fail 'Monitoring installation not found.'
+CONFIG="$DIR/config.json"
+[[ -f "$CONFIG" && -f "$DIR/app/web.py" ]] || fail 'Monitoring app/config not found.'
 
-read -r BACKEND_HOST BACKEND_PORT < <(python3 - "$DIR/config.json" <<'PY'
+CURRENT_PORT="$(python3 - "$CONFIG" <<'PY'
 import json,sys
 cfg=json.load(open(sys.argv[1], encoding='utf-8'))
-print(cfg['listen_host'],cfg['listen_port'])
+print(cfg['listen_port'])
+PY
+)"
+read -r -p 'Public IPv4 address (for displaying the URL): ' IP
+python3 - "$IP" <<'PY' || fail 'Enter a valid public IPv4 address.'
+import ipaddress,sys
+try:
+    ip=ipaddress.IPv4Address(sys.argv[1])
+    assert ip.is_global
+except (ValueError,AssertionError):
+    sys.exit(1)
+PY
+
+read -r -p "Public dashboard port [${CURRENT_PORT}]: " PORT
+PORT="${PORT:-$CURRENT_PORT}"
+[[ "$PORT" =~ ^[0-9]+$ ]] || fail 'Port must be numeric.'
+(( 1024 <= 10#$PORT && 10#$PORT <= 65535 )) || fail 'Port must be between 1024 and 65535.'
+PORT="$((10#$PORT))"
+
+CURRENT_HOST="$(python3 - "$CONFIG" <<'PY'
+import json,sys
+cfg=json.load(open(sys.argv[1], encoding='utf-8'))
+print(cfg['listen_host'])
+PY
+)"
+read -r CURRENT_SSL_CERT CURRENT_SSL_KEY < <(python3 - "$CONFIG" <<'PY'
+import json,sys
+cfg=json.load(open(sys.argv[1], encoding='utf-8'))
+print(cfg.get('ssl_cert','') or 'NONE',cfg.get('ssl_key','') or 'NONE')
 PY
 )
-[[ "$BACKEND_HOST" == '127.0.0.1' ]] || fail 'Dashboard must listen on 127.0.0.1 before publishing.'
-[[ "$BACKEND_PORT" =~ ^[0-9]+$ && $BACKEND_PORT -ge 1024 && $BACKEND_PORT -le 65535 ]] || fail 'Invalid internal dashboard port.'
-if [[ -e /etc/systemd/system/pgtraffic-public.service ]]; then
-  fail 'Public HTTPS is already configured. No existing proxy will be overwritten.'
-fi
+[[ "$CURRENT_SSL_CERT" == NONE && "$CURRENT_SSL_KEY" == NONE ]] || fail 'Existing TLS configuration detected. Public HTTP setup will not disable it.'
 
-read -r -p 'Public subdomain (existing A record pointing to this server): ' DOMAIN
-DOMAIN="${DOMAIN,,}"
-python3 - "$DOMAIN" <<'PY' || fail 'Invalid public subdomain.'
-import re,sys
-value=sys.argv[1]
-assert 4 <= len(value) <= 253
-assert '.' in value and not value.endswith('.')
-assert all(re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', label) for label in value.split('.'))
-assert not value.endswith(('.local','.localhost','.internal','.test','.invalid','.example'))
-PY
-
-read -r -p 'Public HTTPS port [443]: ' PUBLIC_PORT
-PUBLIC_PORT="${PUBLIC_PORT:-443}"
-[[ "$PUBLIC_PORT" =~ ^[0-9]{1,5}$ ]] || fail 'Public HTTPS port must be numeric.'
-(( PUBLIC_PORT == 443 || (PUBLIC_PORT >= 1024 && PUBLIC_PORT <= 65535) )) || fail 'Use 443 or a port between 1024 and 65535.'
-(( PUBLIC_PORT != BACKEND_PORT )) || fail 'Public port must differ from the local dashboard port.'
-
-DNS_IPS="$(getent ahostsv4 "$DOMAIN" | awk '{print $1}' | sort -u | paste -sd , - || true)"
-[[ -n "$DNS_IPS" ]] || fail 'Domain has no resolvable A record. Configure DNS first.'
-
-# Existing sites and listeners are never stopped or modified.
-for port in 80 443 "$PUBLIC_PORT"; do
-  if ss -H -ltn "( sport = :$port )" | grep -q .; then
-    fail "Port $port is in use. Existing web services will not be modified."
+if [[ "$CURRENT_HOST" != '0.0.0.0' || "$PORT" != "$CURRENT_PORT" ]]; then
+  if ss -H -ltn "( sport = :$PORT )" | grep -q .; then
+    fail "Port $PORT is already in use. Choose another port."
   fi
-done
-if systemctl is-active --quiet caddy.service 2>/dev/null; then
-  fail 'An existing Caddy service is active. This tool will not change it.'
 fi
 
-printf '\n=== Confirm public HTTPS setup ===\n'
-printf 'Subdomain:     %s\n' "$DOMAIN"
-printf 'DNS IPv4:      %s\n' "$DNS_IPS"
-printf 'Internal app:  http://127.0.0.1:%s\n' "$BACKEND_PORT"
-printf 'Public URL:    https://%s%s\n' "$DOMAIN" "$([[ "$PUBLIC_PORT" == 443 ]] || printf ':%s' "$PUBLIC_PORT")"
-printf 'Needs inbound: TCP 80, 443%s (firewall/provider rules are not modified)\n' "$([[ "$PUBLIC_PORT" == 443 ]] || printf ', %s' "$PUBLIC_PORT")"
-echo 'May install Caddy and creates only the monitor-owned pgtraffic-public.service.'
-echo 'PasarGuard containers, node settings, and user quota accounting are untouched.'
-read -r -p 'Proceed? [y/N]: ' OK
+printf '\n=== Publish dashboard via public HTTP ===\n'
+printf 'URL:        http://%s:%s\n' "$IP" "$PORT"
+printf 'Application: %s\n' "$DIR/app/web.py"
+echo 'WARNING: HTTP is NOT encrypted. Passwords and sessions can be intercepted.'
+echo 'Use a unique password, not one shared with SSH/PasarGuard.'
+echo 'Only the monitor service/config will be changed; firewall rules remain unchanged.'
+read -r -p 'Expose the monitoring dashboard publicly via HTTP? [y/N]: ' OK
 [[ "$OK" =~ ^[Yy]$ ]] || { echo 'Cancelled; nothing changed.'; exit 0; }
 
-CADDY_INSTALLED_BY_US=no
-if ! command -v caddy >/dev/null 2>&1; then
-  command -v apt-get >/dev/null 2>&1 || fail 'Caddy is missing and apt-get is unavailable.'
-  echo '=== Installing Caddy from system packages ==='
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update
-  apt-get install -y caddy
-  CADDY_INSTALLED_BY_US=yes
-fi
-CADDY_BIN="$(command -v caddy)"
-[[ -x "$CADDY_BIN" ]] || fail 'Caddy executable not found.'
-if [[ "$CADDY_INSTALLED_BY_US" == yes ]]; then
-  # Stop only the stock caddy.service installed by this invocation.
-  systemctl disable --now caddy.service 2>/dev/null || true
-fi
-for port in 80 443 "$PUBLIC_PORT"; do
-  if ss -H -ltn "( sport = :$port )" | grep -q .; then
-    fail "Port $port became busy. No existing service will be stopped."
-  fi
-done
+BACKUP="$(mktemp "$DIR/.config-before-public.XXXXXXXX")"
+cp -p -- "$CONFIG" "$BACKUP"
+chmod 600 "$BACKUP"
+TEMP="$(mktemp "$DIR/.config-public.XXXXXXXX")"
+trap 'rm -f -- "$TEMP"' EXIT
+cp -p -- "$CONFIG" "$TEMP"
+python3 - "$TEMP" "$PORT" <<'PY'
+import json,sys
+p=sys.argv[1]
+with open(p,encoding='utf-8') as f: cfg=json.load(f)
+cfg['listen_host']='0.0.0.0'
+cfg['listen_port']=int(sys.argv[2])
+with open(p,'w',encoding='utf-8') as f:
+    json.dump(cfg,f,ensure_ascii=False,indent=2)
+    f.write('\n')
+PY
+mv -f -- "$TEMP" "$CONFIG"
 
-PROXY_DIR="$DIR/public-proxy"
-CERT_DATA='/var/lib/pgtraffic-caddy'
-install -d -m 755 "$PROXY_DIR"
-install -d -m 750 -o pgtraffic -g pgtraffic "$CERT_DATA"
-SITE="https://$DOMAIN"
-[[ "$PUBLIC_PORT" == 443 ]] || SITE="$SITE:$PUBLIC_PORT"
-cat > "$PROXY_DIR/Caddyfile.tmp" <<EOF
-{
-    admin off
-}
-$SITE {
-    reverse_proxy 127.0.0.1:$BACKEND_PORT
-}
-EOF
-"$CADDY_BIN" validate --config "$PROXY_DIR/Caddyfile.tmp" --adapter caddyfile || fail 'Generated Caddy configuration is invalid.'
-install -m 644 "$PROXY_DIR/Caddyfile.tmp" "$PROXY_DIR/Caddyfile"
-rm -f "$PROXY_DIR/Caddyfile.tmp"
-
-cat > /etc/systemd/system/pgtraffic-public.service <<EOF
-[Unit]
-Description=Public HTTPS reverse proxy for PasarGuard traffic monitor
-After=network-online.target pgtraffic-web.service
-Wants=network-online.target
-Requires=pgtraffic-web.service
-[Service]
-Type=simple
-User=pgtraffic
-Group=pgtraffic
-Environment=HOME=$CERT_DATA
-Environment=XDG_DATA_HOME=$CERT_DATA/data
-Environment=XDG_CONFIG_HOME=$CERT_DATA/config
-WorkingDirectory=$PROXY_DIR
-ExecStart=$CADDY_BIN run --config $PROXY_DIR/Caddyfile --adapter caddyfile
-Restart=on-failure
-RestartSec=5
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectHome=true
-ProtectSystem=strict
-ReadWritePaths=$CERT_DATA
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl daemon-reload
-systemctl enable --now pgtraffic-web.service
-systemctl enable --now pgtraffic-public.service
-if ! systemctl is-active --quiet pgtraffic-public.service; then
-  fail 'Proxy did not start. Check: journalctl -u pgtraffic-public.service -n 50 --no-pager'
+if ! systemctl restart pgtraffic-web.service; then
+  cp -p -- "$BACKUP" "$CONFIG"
+  systemctl restart pgtraffic-web.service || true
+  fail 'Dashboard restart failed. Original configuration restored.'
 fi
-printf '\n=== Public proxy started ===\nURL: https://%s%s\n' "$DOMAIN" "$([[ "$PUBLIC_PORT" == 443 ]] || printf ':%s' "$PUBLIC_PORT")"
-echo 'Caddy requests and renews HTTPS certificates automatically if DNS and inbound ports work.'
-echo 'Verify externally in a browser. A running service does not prove TLS issuance succeeded.'
-echo 'Logs: journalctl -u pgtraffic-public.service -n 40 --no-pager'
+sleep 2
+if ! systemctl is-active --quiet pgtraffic-web.service; then
+  cp -p -- "$BACKUP" "$CONFIG"
+  systemctl restart pgtraffic-web.service || true
+  fail 'Dashboard exited. Original configuration restored.'
+fi
+LOCAL_CODE="$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/" || true)"
+if [[ "$LOCAL_CODE" != 303 && "$LOCAL_CODE" != 200 ]]; then
+  cp -p -- "$BACKUP" "$CONFIG"
+  systemctl restart pgtraffic-web.service || true
+  fail "Dashboard HTTP probe failed ($LOCAL_CODE). Original configuration restored."
+fi
+systemctl enable pgtraffic-web.service >/dev/null
+
+printf '\n=== Dashboard is listening on public port %s ===\n' "$PORT"
+printf 'Open: http://%s:%s\n' "$IP" "$PORT"
+echo 'If it is not reachable from the internet, check your hosting provider firewall.'
+echo "Local config backup (root only): $BACKUP"
+echo 'Collection timer was not enabled or modified.'
