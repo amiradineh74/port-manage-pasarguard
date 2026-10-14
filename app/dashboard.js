@@ -19,14 +19,15 @@ function render(){if(!state)return;
  $('up').textContent=traffic(state.total.up);
  $('billed').textContent=traffic(state.total.billed);
  $('cost').textContent=money(state.total.cost);
+ $('historical-cost').textContent='هزینه ثبت‌شده قبلی: '+money(state.total.historical_cost);
  const lr=state.last_run;
  $('status').className='notice'+(lr&&JSON.parse(lr.errors_json).length?' warn':'');
  $('status').textContent=lr?'آخرین نمونه‌برداری: '+age(lr.collected_at)+' | تعداد نمونه: '+fmt(lr.sample_count)+(JSON.parse(lr.errors_json).length?' | هشدار: '+JSON.parse(lr.errors_json).join('، '):''):'هنوز نمونه‌ای ثبت نشده؛ یک بار دستور collect را اجرا کنید.';
  chart(state.daily);
- $('providers').innerHTML=Object.entries(state.providers).sort((a,b)=>b[1].cost-a[1].cost).map(([name,p])=>`<div class="provider"><strong>${escapeHtml(name)}</strong><small>مصرف مشمول هزینه: ${traffic(p.billed)}</small><small>هزینه: ${money(p.cost)}</small></div>`).join('')||'<p>آماری وجود ندارد.</p>';
+ $('providers').innerHTML=Object.entries(state.providers).sort((a,b)=>b[1].cost-a[1].cost).map(([name,p])=>`<div class="provider"><strong>${escapeHtml(name)}</strong><small>مصرف مشمول هزینه: ${traffic(p.billed)}</small><small>هزینه با نرخ فعلی: ${money(p.cost)}</small><small>هزینه ثبت‌شده قبلی: ${money(p.historical_cost)}</small></div>`).join('')||'<p>آماری وجود ندارد.</p>';
  const q=$('search').value.trim().toLowerCase();
  const ports=state.ports.filter(p=>(p.enabled||$('show_hidden').checked)&&[p.node_name,p.port,p.title,p.provider,p.tag].join(' ').toLowerCase().includes(q));
- $('ports').innerHTML=ports.map(p=>`<tr class="${p.enabled?'':'muted'}"><td><strong>${escapeHtml(p.node_name)}</strong><span class="sub">پورت ${p.port} · نود ${p.node_id}</span></td><td>${escapeHtml(p.title||'بدون نام دلخواه')}<span class="sub">${escapeHtml(p.provider||'تعرفه تعیین نشده')} · <span class="tag">${escapeHtml(p.tag)}</span></span></td><td>${traffic(p.down)}</td><td>${traffic(p.up)}</td><td class="money">${money(p.cost)}</td><td>${age(p.last_seen)}</td><td><button class="editbtn" data-nid="${p.node_id}" data-port="${p.port}">ویرایش</button></td></tr>`).join('')||'<tr><td colspan="7">پورتی پیدا نشد.</td></tr>';
+ $('ports').innerHTML=ports.map(p=>`<tr class="${p.enabled?'':'muted'}"><td><strong>${escapeHtml(p.node_name)}</strong><span class="sub">پورت ${p.port} · نود ${p.node_id}</span></td><td>${escapeHtml(p.title||'بدون نام دلخواه')}<span class="sub">${escapeHtml(p.provider||'تعرفه تعیین نشده')} · <span class="tag">${escapeHtml(p.tag)}</span></span></td><td>${traffic(p.down)}</td><td>${traffic(p.up)}</td><td class="money">${money(p.cost)}<span class="sub">قبلی: ${money(p.historical_cost)}</span></td><td>${age(p.last_seen)}</td><td><button class="editbtn" data-nid="${p.node_id}" data-port="${p.port}">ویرایش</button></td></tr>`).join('')||'<tr><td colspan="7">پورتی پیدا نشد.</td></tr>';
  document.querySelectorAll('.editbtn').forEach(btn=>btn.addEventListener('click',()=>openEdit(Number(btn.dataset.nid),Number(btn.dataset.port))));
  $('export').href='/api/export.csv?'+new URLSearchParams({from:$('from').value,to:$('to').value});
 }
