@@ -184,3 +184,32 @@ body dialog h2{padding-bottom:8px;border-bottom:1px solid var(--line)}
 .cost-header-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .cost-header-actions a,.cost-header-actions button{min-height:42px;display:inline-flex;align-items:center}
 @media(max-width:550px){.cost-header-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.cost-header-actions a,.cost-header-actions button{width:100%;text-align:center;justify-content:center}}
+
+
+/* Compact sticky section navigation: stays lightweight, accessible and touch friendly */
+.section-nav{position:sticky;top:0;z-index:45;display:flex;gap:8px;overflow-x:auto;
+ scrollbar-width:thin;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;
+ padding:10px 12px;margin:0 0 16px;background:var(--panel);
+ border:1px solid var(--line);border-radius:var(--radius);
+ box-shadow:0 7px 20px #0002}
+.section-nav a{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;
+ text-decoration:none;border:1px solid transparent;border-radius:10px;
+ min-height:42px;padding:8px 14px;font-size:13px;font-weight:600;
+ color:var(--text);white-space:nowrap}
+.section-nav a:hover,.section-nav a:focus-visible,.section-nav a[aria-current="location"]{
+ background:var(--panel2);border-color:var(--blue);outline-offset:2px}
+#overview,#providers-section,#ports-section,#manage,#expenses,#settings-section{scroll-margin-top:85px}
+.expense-formula{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+ padding:12px 15px;margin:8px 0 16px;border-radius:10px;
+ background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+ font-size:12px;line-height:1.9}
+.expense-formula strong{color:var(--text)}
+.expense-prorate{font-size:11px;display:block;color:var(--muted);
+ line-height:1.8;margin-top:6px;white-space:normal;max-width:260px}
+@media(max-width:600px){
+ .section-nav{padding:7px;margin-bottom:12px;gap:4px;border-radius:10px}
+ .section-nav a{font-size:12px;min-height:42px;padding:8px 11px}
+ #overview,#providers-section,#ports-section,#manage,#expenses,#settings-section{scroll-margin-top:72px}
+ .expense-formula{padding:10px;gap:4px}
+ .expense-formula strong{width:100%}
+}
