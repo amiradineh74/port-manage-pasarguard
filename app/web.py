@@ -379,13 +379,15 @@ class Handler(BaseHTTPRequestHandler):
             query+=' AND s.port=?';vals.append(int(port))
         query+=' ORDER BY s.collected_at,s.node_id,s.port LIMIT 150000'
         out=StringIO();w=csv.writer(out)
-        w.writerow(['زمان UTC','نود','شناسه نود','پورت','Tag','Downlink Raw B','Uplink Raw B','Downlink Delta B','Uplink Delta B','Billable Bytes','Rate Toman Per GB','Cost Toman','Event'])
+        w.writerow(['زمان UTC','نود','شناسه نود','پورت','Tag','Downlink Raw B','Uplink Raw B','Downlink Delta B','Uplink Delta B','Billable Bytes','Recorded Rate Toman/GB','Recorded Cost Toman','Event','Recorded Rate Rial/GB','Recorded Cost Rial'])
         with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
             for row in db.execute(query,vals):
                 fields=list(row)
                 # Block spreadsheet formula injection in text-like fields.
                 for idx in (1,4,12):
                     if str(fields[idx]).startswith(('=','+','-','@','\t','\r')):fields[idx]="'"+str(fields[idx])
+                # Keep original legacy units for audit and add explicit Rial equivalents.
+                fields.extend((float(row[10])*10, float(row[11])*10))
                 w.writerow(fields)
         return self.send_bytes(('\ufeff'+out.getvalue()).encode('utf-8'),ctype='text/csv; charset=utf-8',
                                extra={'Content-Disposition':'attachment; filename="pasarguard-traffic.csv"'})
