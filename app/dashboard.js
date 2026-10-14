@@ -25,7 +25,7 @@ function render(){if(!state)return;
  chart(state.daily);
  $('providers').innerHTML=Object.entries(state.providers).sort((a,b)=>b[1].cost-a[1].cost).map(([name,p])=>`<div class="provider"><strong>${escapeHtml(name)}</strong><small>مصرف مشمول هزینه: ${traffic(p.billed)}</small><small>هزینه: ${money(p.cost)}</small></div>`).join('')||'<p>آماری وجود ندارد.</p>';
  const q=$('search').value.trim().toLowerCase();
- const ports=state.ports.filter(p=>[p.node_name,p.port,p.title,p.provider,p.tag].join(' ').toLowerCase().includes(q));
+ const ports=state.ports.filter(p=>(p.enabled||$('show_hidden').checked)&&[p.node_name,p.port,p.title,p.provider,p.tag].join(' ').toLowerCase().includes(q));
  $('ports').innerHTML=ports.map(p=>`<tr class="${p.enabled?'':'muted'}"><td><strong>${escapeHtml(p.node_name)}</strong><span class="sub">پورت ${p.port} · نود ${p.node_id}</span></td><td>${escapeHtml(p.title||'بدون نام دلخواه')}<span class="sub">${escapeHtml(p.provider||'تعرفه تعیین نشده')} · <span class="tag">${escapeHtml(p.tag)}</span></span></td><td>${traffic(p.down)}</td><td>${traffic(p.up)}</td><td class="money">${money(p.cost)}</td><td>${age(p.last_seen)}</td><td><button class="editbtn" data-nid="${p.node_id}" data-port="${p.port}">ویرایش</button></td></tr>`).join('')||'<tr><td colspan="7">پورتی پیدا نشد.</td></tr>';
  document.querySelectorAll('.editbtn').forEach(btn=>btn.addEventListener('click',()=>openEdit(Number(btn.dataset.nid),Number(btn.dataset.port))));
  $('export').href='/api/export.csv?'+new URLSearchParams({from:$('from').value,to:$('to').value});
@@ -52,7 +52,7 @@ async function save(e){e.preventDefault();try{
  }catch(e){alert(e.message);}}
 function today(){const d=new Date();return d.toISOString().slice(0,10);}
 const d=new Date();$('to').value=today();d.setDate(d.getDate()-6);$('from').value=d.toISOString().slice(0,10);
-$('reload').addEventListener('click',reload);$('search').addEventListener('input',render);
+$('reload').addEventListener('click',reload);$('search').addEventListener('input',render);$('show_hidden').addEventListener('change',render);
 $('editform').addEventListener('submit',save);$('cancel').addEventListener('click',()=>$('edit').close());
 $('logout').addEventListener('click',async()=>{if(!state){location.href='/login';return;}await fetch('/api/logout',{method:'POST',headers:{'X-CSRF-Token':state.csrf}});location.href='/login';});
 reload();
