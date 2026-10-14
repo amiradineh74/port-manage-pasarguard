@@ -252,6 +252,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(data)
             except ValueError as e:return self.send_json({'error':str(e)},400)
         if path=='/api/export.csv':return self.export_csv(parse_qs(urlsplit(self.path).query))
+        if path=='/api/expenses.csv':return self.export_expenses_csv(parse_qs(urlsplit(self.path).query))
         return self.send_json({'error':'یافت نشد'},404)
 
     def redirect(self,where,extra=None):
@@ -401,6 +402,31 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError,KeyError,TypeError,OverflowError) as e:
                 return self.send_json({'error':str(e)},400)
         return self.send_json({'error':'یافت نشد'},404)
+
+    def export_expenses_csv(self,params):
+        try:
+            with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
+                tz=display_preferences(db)['timezone']
+                _,_,lo,hi=utc_bounds(params,tz)
+                expenses=expenses_report(db,lo,hi)
+        except ValueError as exc:
+            return self.send_json({'error':str(exc)},400)
+        out=StringIO();writer=csv.writer(out)
+        writer.writerow(['عنوان هزینه','دسته','نوع تخصیص','Node ID','ارائه‌دهنده',
+                         'دوره','مبلغ پایه ریال','تاریخ شروع ISO','تاریخ پایان ISO',
+                         'هزینه در بازه ریال','یادداشت'])
+        for e in expenses:
+            fields=[e['label'],e['category'],e['scope'],e['node_id'],e['provider'],
+                    e['frequency'],e['amount_rial'],e['start_date'],e['end_date'],
+                    round(e['period_rial']),e['note']]
+            for i in (0,1,2,4,5,10):
+                if isinstance(fields[i],str) and fields[i].startswith(('=','+','-','@','\\t','\\r')):
+                    fields[i]="'"+fields[i]
+            writer.writerow(fields)
+        writer.writerow(['جمع هزینه ثابت در بازه','','','','','','','','',round(fixed_total(expenses)),''])
+        return self.send_bytes(('\\ufeff'+out.getvalue()).encode('utf-8'),
+                               ctype='text/csv; charset=utf-8',
+                               extra={'Content-Disposition':'attachment; filename="pgtraffic-fixed-expenses.csv"'})
 
     def export_csv(self,params):
         try:
