@@ -18,3 +18,4 @@ jobs:
           node --check app/dashboard.js
           node --check app/jalali.js
           node tests/test_jalali.js
+          node tests/test_frontend.js
