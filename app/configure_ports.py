@@ -9,16 +9,19 @@ def ask(label,existing):
     value=input('%s [%s]: ' % (label,existing)).strip()
     return value if value else str(existing)
 
-def edit(db,row,cfg):
+def edit(db,row,cfg,currency):
     nid,port,name=row
     meta=db.execute('SELECT * FROM metadata WHERE node_id=? AND port=?',(nid,port)).fetchone()
     print('\n--- %s / %s ---'%(name,port))
     title=ask('Display name',meta['title'] if meta else name+' : '+str(port))
     provider=ask('Provider name',meta['provider'] if meta else '')
+    multiplier = 10 if currency == 'Rial' else 1
+    existing_rate = (meta['price_per_gb'] if meta else cfg.get('default_price_per_gb',0)) * multiplier
     while True:
         try:
-            rate=float(ask('Rate per GB (Toman)',meta['price_per_gb'] if meta else cfg.get('default_price_per_gb',0)))
-            if not 0<=rate<=1e12:raise ValueError
+            entered_rate=float(ask('Rate per GB ('+currency+')',existing_rate))
+            if not 0<=entered_rate<=1e13:raise ValueError
+            rate=entered_rate / multiplier  # Old SQLite rates use Toman internally.
             break
         except ValueError:print('Invalid number')
     direction=ask('Billed direction (downlink/uplink/both)',meta['bill_direction'] if meta else cfg.get('default_bill_direction','downlink'))
@@ -48,6 +51,11 @@ def main():
         else:
             try:chosen=[rows[int(choice)-1]]
             except (ValueError,IndexError):print('Invalid selection');return
-        for r in chosen:edit(db,r,cfg)
+        override=db.execute("SELECT value FROM settings WHERE key='display_currency'").fetchone()
+        label=override['value'] if override else cfg.get('currency','Rial')
+        # Existing installations with old Toman defaults display in Rial in the web UI.
+        if not override and label in ('Toman','تومان'): label='Rial'
+        currency='Rial' if label in ('Rial','IRR','ریال') else 'Toman'
+        for r in chosen:edit(db,r,cfg,currency)
 
 if __name__=='__main__':main()
