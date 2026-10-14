@@ -79,4 +79,58 @@ class WebTests(unittest.TestCase):
         self.assertIn('text/csv',headers['Content-Type'])
         self.assertIn('2053',content.decode())
 
+
+    def test_web_can_manage_visible_ports_and_preferences(self):
+        cookie=self.login()
+        with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+            sample={'nodes':[
+                {'node_id':5,'node_name':'Germany','address':'192.0.2.1',
+                 'ports':[{'port':50315,'tag':'other','uplink':0,'downlink':7}]},
+                {'node_id':6,'node_name':'Turkey','address':'192.0.2.2',
+                 'ports':[{'port':8443,'tag':'turkey','uplink':0,'downlink':17}]}
+            ],'errors':[]}
+            insert_poll(db,sample,'2026-10-13T00:02:00+00:00',web.CFG)
+        st,_,body=self.request('GET','/api/dashboard?from=2026-10-13&to=2026-10-13',
+                               headers={'Cookie':cookie})
+        self.assertEqual(st,200)
+        old=json.loads(body)
+        csrf=old['csrf']
+
+        data={'node_id':5,'visible_ports':[2053]}
+        # CSRF is still mandatory for these new mutations.
+        st,_,_=self.request('POST','/api/visible-ports',json.dumps(data),
+                            {'Cookie':cookie,'Content-Type':'application/json'})
+        self.assertEqual(st,403)
+        hdr={'Cookie':cookie,'Content-Type':'application/json','X-CSRF-Token':csrf}
+        st,_,body=self.request('POST','/api/visible-ports',
+                               json.dumps({'node_id':5,'visible_ports':[9999]}),hdr)
+        self.assertEqual(st,400)
+        st,_,body=self.request('POST','/api/visible-ports',json.dumps(data),hdr)
+        self.assertEqual(st,200)
+        with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+            selected={r['port']:r['enabled'] for r in db.execute(
+                'SELECT p.port,COALESCE(m.enabled,1) enabled FROM port_state p '
+                'LEFT JOIN metadata m ON p.node_id=m.node_id AND p.port=m.port '
+                'WHERE p.node_id=5')}
+            turkey=db.execute('SELECT COUNT(*) FROM metadata WHERE node_id=6').fetchone()[0]
+        self.assertEqual(selected[2053],1)
+        self.assertEqual(selected[50315],0)
+        self.assertEqual(turkey,0)  # Other node untouched.
+
+        prefs={'title':'My new title','currency':'Toman','timezone':'UTC'}
+        st,_,_=self.request('POST','/api/display-settings',json.dumps(prefs),hdr)
+        self.assertEqual(st,200)
+        st,_,body=self.request('GET','/api/dashboard?from=2026-10-13&to=2026-10-13',
+                               headers={'Cookie':cookie})
+        self.assertEqual(st,200)
+        new=json.loads(body)
+        self.assertEqual(new['title'],'My new title')
+        self.assertEqual(new['currency'],'Toman')
+        self.assertEqual(new['timezone'],'UTC')
+        self.assertEqual([p['enabled'] for p in new['ports'] if p['node_id']==5 and p['port']==50315],[0])
+        self.assertEqual(new['total']['down'],1000000000)
+        st,_,_=self.request('POST','/api/display-settings',
+                            json.dumps({'title':'Bad','currency':'Toman','timezone':'Invalid/Zone'}),hdr)
+        self.assertEqual(st,400)
+
 if __name__=='__main__':unittest.main()
