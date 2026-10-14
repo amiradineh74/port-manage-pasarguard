@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+"""Optional interactive metadata editor; never reads or writes PasarGuard itself."""
+import argparse
+from pathlib import Path
+import json
+from storage import connect
+
+def ask(label,existing):
+    value=input('%s [%s]: ' % (label,existing)).strip()
+    return value if value else str(existing)
+
+def edit(db,row,cfg):
+    nid,port,name=row
+    meta=db.execute('SELECT * FROM metadata WHERE node_id=? AND port=?',(nid,port)).fetchone()
+    print('\n--- %s / %s ---'%(name,port))
+    title=ask('نام دلخواه',meta['title'] if meta else name+' : '+str(port))
+    provider=ask('نام ارائه‌دهنده',meta['provider'] if meta else '')
+    while True:
+        try:
+            rate=float(ask('تعرفه هر GB به تومان',meta['price_per_gb'] if meta else cfg.get('default_price_per_gb',0)))
+            if not 0<=rate<=1e12:raise ValueError
+            break
+        except ValueError:print('عدد نامعتبر')
+    direction=ask('جهت هزینه downlink/uplink/both',meta['bill_direction'] if meta else cfg.get('default_bill_direction','downlink'))
+    if direction not in ('downlink','uplink','both'):
+        print('جهت نامعتبر؛ لغو.');return
+    notes=ask('یادداشت',meta['notes'] if meta else '')
+    with db:
+        db.execute('''INSERT INTO metadata(node_id,port,title,provider,price_per_gb,bill_direction,notes)
+        VALUES(?,?,?,?,?,?,?) ON CONFLICT(node_id,port) DO UPDATE SET
+        title=excluded.title,provider=excluded.provider,price_per_gb=excluded.price_per_gb,
+        bill_direction=excluded.bill_direction,notes=excluded.notes''',
+        (nid,port,title,provider,rate,direction,notes))
+    print('ذخیره شد؛ تعرفه از نمونه بعدی اعمال می‌شود.')
+
+def main():
+    p=argparse.ArgumentParser();p.add_argument('--config',default='/opt/pg-traffic-monitor/config.json');a=p.parse_args()
+    cfg=json.loads(Path(a.config).read_text(encoding='utf-8'))
+    with connect(Path(cfg['data_dir'])/'traffic.sqlite3') as db:
+        rows=db.execute('SELECT node_id,port,node_name FROM port_state ORDER BY node_name,port').fetchall()
+        if not rows:
+            print('اول نمونه‌برداری اولیه را اجرا کنید.');return
+        print('\nفهرست پورت‌ها:')
+        for idx,r in enumerate(rows,1):print('%2d) %s  port=%s  node_id=%s'%(idx,r['node_name'],r['port'],r['node_id']))
+        choice=input('شماره پورت، all برای همه یا Enter برای خروج: ').strip().lower()
+        if not choice:return
+        if choice=='all':chosen=rows
+        else:
+            try:chosen=[rows[int(choice)-1]]
+            except (ValueError,IndexError):print('شماره نامعتبر');return
+        for r in chosen:edit(db,r,cfg)
+
+if __name__=='__main__':main()

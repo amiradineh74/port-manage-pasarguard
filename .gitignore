@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.sqlite3
+*.sqlite3-*
+config.json
+config.backup-*.json
+.env
+*.pem
+*.key
+*.crt
+.idea/
+.vscode/
+.DS_Store
