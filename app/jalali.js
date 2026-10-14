@@ -17,7 +17,8 @@ function toISO(y,m,d){
 }
 function shift(y,m,n){let k=y*12+m-1+n;return [Math.floor(k/12),(k%12+12)%12+1];}
 const pad=n=>String(n).padStart(2,'0');
-const label=s=>{const [y,m,d]=fromISO(s);return y+'/'+pad(m)+'/'+pad(d);};
+const fa=n=>String(n).replace(/[0-9]/g,d=>'۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+const label=s=>{const [y,m,d]=fromISO(s);return fa(y+'/'+pad(m)+'/'+pad(d));};
 function attach(field,displayId,popoverId,onChange){
  const hidden=document.getElementById(field),display=document.getElementById(displayId),popup=document.getElementById(popoverId);
  let showing=[1405,7],open=false;
@@ -26,10 +27,10 @@ function attach(field,displayId,popoverId,onChange){
   const [y,m]=showing,first=toISO(y,m,1),firstDay=Date.parse(first+'T00:00:00Z')/86400000;
   const next=shift(y,m,1),last=Date.parse(toISO(next[0],next[1],1)+'T00:00:00Z')/86400000;
   const offset=(utcDay(firstDay).getUTCDay()+1)%7;
-  let html='<div class="jnav"><button type="button" data-shift="-1" aria-label="ماه قبل">‹</button><strong>'+monthName.format(new Date(first+'T12:00:00Z'))+' '+y+'</strong><button type="button" data-shift="1" aria-label="ماه بعد">›</button></div>';
+  let html='<div class="jnav"><button type="button" data-shift="-1" aria-label="ماه قبل">‹</button><strong>'+monthName.format(new Date(first+'T12:00:00Z'))+' '+fa(y)+'</strong><button type="button" data-shift="1" aria-label="ماه بعد">›</button></div>';
   html+='<div class="jgrid">'+['ش','ی','د','س','چ','پ','ج'].map(x=>'<span class="jweekday">'+x+'</span>').join('');
   for(let i=0;i<offset;i++)html+='<span></span>';
-  for(let d=1;d<=last-firstDay;d++){const value=iso(firstDay+d-1);html+='<button type="button" class="jday '+(hidden.value===value?'chosen':'')+'" data-iso="'+value+'">'+d+'</button>';}
+  for(let d=1;d<=last-firstDay;d++){const value=iso(firstDay+d-1);html+='<button type="button" class="jday '+(hidden.value===value?'chosen':'')+'" data-iso="'+value+'">'+fa(d)+'</button>';}
   popup.innerHTML=html+'</div>';
   popup.querySelectorAll('[data-shift]').forEach(b=>b.addEventListener('click',()=>{showing=shift(showing[0],showing[1],Number(b.dataset.shift));render();}));
   popup.querySelectorAll('[data-iso]').forEach(b=>b.addEventListener('click',()=>{set(b.dataset.iso);popup.hidden=true;open=false;if(onChange)onChange();}));
