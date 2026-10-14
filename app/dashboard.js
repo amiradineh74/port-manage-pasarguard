@@ -56,6 +56,41 @@ function renderManagement(){
  $('display-currency').value=state.currency;
  $('display-timezone').value=state.timezone;
 }
+
+async function sendUpdate(url,payload){
+ if(!state)throw Error('آمار داشبورد هنوز آماده نیست.');
+ const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':state.csrf},body:JSON.stringify(payload)});
+ if(r.status===401){location.href='/login';throw Error('ابتدا وارد حساب شوید.');}
+ const resp=await r.json();
+ if(!r.ok)throw Error(resp.error||'خطا در ذخیره تنظیمات');
+ return resp;
+}
+async function saveNodePorts(e){
+ e.preventDefault();
+ const form=e.currentTarget,nodeId=Number(form.dataset.node);
+ const ports=[...form.querySelectorAll('input[type=checkbox]:checked')].map(x=>Number(x.value));
+ const button=form.querySelector('button[type=submit]');
+ button.disabled=true;
+ try{
+  await sendUpdate('/api/visible-ports',{node_id:nodeId,visible_ports:ports});
+  await reload();
+  $('status').textContent='فهرست پورت‌های نود '+nodeId+' ذخیره شد.';
+ }catch(err){alert(err.message);}
+ finally{button.disabled=false;}
+}
+async function saveDisplaySettings(e){
+ e.preventDefault();
+ const form=e.currentTarget,button=form.querySelector('button[type=submit]');
+ button.disabled=true;
+ try{
+  await sendUpdate('/api/display-settings',{
+   title:$('display-title').value.trim(),currency:$('display-currency').value.trim(),
+   timezone:$('display-timezone').value.trim()});
+  await reload();
+  $('status').textContent='تنظیمات نمایش ذخیره شد.';
+ }catch(err){alert(err.message);}
+ finally{button.disabled=false;}
+}
 function openEdit(node,port){const p=state.ports.find(x=>x.node_id===node&&x.port===port);if(!p)return;
  $('editing').textContent=p.port+' / '+p.node_name; $('node_id').value=node; $('port').value=port;
  $('port_title').value=p.title; $('provider').value=p.provider; $('rate').value=p.price_per_gb;
@@ -66,7 +101,7 @@ async function reload(){try{
  const url='/api/dashboard?'+new URLSearchParams({from:$('from').value,to:$('to').value});
  const r=await fetch(url,{cache:'no-store'});
  if(r.status===401){location.href='/login';return;}
- const data=await r.json();if(!r.ok)throw Error(data.error||'خطا');state=data;render();
+ const data=await r.json();if(!r.ok)throw Error(data.error||'خطا');state=data;render();renderManagement();
  }catch(e){$('status').className='notice warn';$('status').textContent=e.message;}}
 async function save(e){e.preventDefault();try{
  const body={node_id:Number($('node_id').value),port:Number($('port').value),title:$('port_title').value,
@@ -79,6 +114,7 @@ async function save(e){e.preventDefault();try{
 function today(){const d=new Date();return d.toISOString().slice(0,10);}
 const d=new Date();$('to').value=today();d.setDate(d.getDate()-6);$('from').value=d.toISOString().slice(0,10);
 $('reload').addEventListener('click',reload);$('search').addEventListener('input',render);$('show_hidden').addEventListener('change',render);
+$('display-form').addEventListener('submit',saveDisplaySettings);
 $('editform').addEventListener('submit',save);$('cancel').addEventListener('click',()=>$('edit').close());
 $('logout').addEventListener('click',async()=>{if(!state){location.href='/login';return;}await fetch('/api/logout',{method:'POST',headers:{'X-CSRF-Token':state.csrf}});location.href='/login';});
 reload();
