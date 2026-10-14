@@ -27,3 +27,9 @@
 .chart svg{height:auto;min-height:220px}
 #traffic-chart-caption{margin-top:5px}
 @media(max-width:620px){.provider-button{min-width:145px;flex:1 1 145px}.chart{overflow-x:auto}.chart svg{min-width:500px}}
+
+/* Safe assisted/manual node-to-port selection */
+.manual-ports-label{display:flex;flex-direction:column;gap:6px;color:var(--muted);font-size:12px;margin:14px 0}
+.port-manual{direction:ltr;text-align:left;width:100%;font-family:Consolas,monospace;font-size:14px}
+.node-card .port-checks{margin:12px 0}
+.node-card .buttons{gap:8px}
