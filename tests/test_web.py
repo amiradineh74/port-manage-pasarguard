@@ -182,7 +182,7 @@ class WebTests(unittest.TestCase):
             headers={'Cookie':cookie})
         self.assertEqual(st,200)
         self.assertIn('text/csv',headers['Content-Type'])
-        self.assertTrue(csvdata.startswith(b'\\xef\\xbb\\xbf'))
+        self.assertTrue(csvdata.startswith(b'\xef\xbb\xbf'))
         self.assertIn('DE server',csvdata.decode('utf-8-sig'))
         self.assertIn('10000',csvdata.decode('utf-8-sig'))
         item.update({'id':expense_id,'amount_rial':620000})
