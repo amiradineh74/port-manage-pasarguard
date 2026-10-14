@@ -73,7 +73,8 @@ class WebTests(unittest.TestCase):
         st,_,b=self.request('GET','/api/dashboard?from=2026-10-13&to=2026-10-13',headers={'Cookie':cookie})
         data2=json.loads(b)
         self.assertEqual(data2['ports'][0]['title'],'Paqet-Germany')
-        self.assertEqual(data2['total']['cost'],1000)  # history rate snapshot preserved
+        self.assertEqual(data2['total']['cost'],850)  # current rate on the same 1 GB
+        self.assertEqual(data2['total']['historical_cost'],1000)  # unchanged snapshot
         st,headers,content=self.request('GET','/api/export.csv?from=2026-10-13&to=2026-10-13',headers={'Cookie':cookie})
         self.assertEqual(st,200)
         self.assertIn('text/csv',headers['Content-Type'])
