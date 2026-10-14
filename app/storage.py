@@ -135,6 +135,11 @@ def insert_poll(db, payload, timestamp, settings):
                 (nid,port,node['node_name'],node['address'],tag,raw_up,raw_dn,
                  (previous['total_up'] if previous else 0)+du,
                  (previous['total_down'] if previous else 0)+dd,timestamp))
+                # Keep state/baselines and all significant events even with no traffic.
+                # For low-overhead installations, avoid a zero-byte sample every
+                # minute for every idle port (highly beneficial with 20+ nodes).
+                if settings.get('sparse_samples',False) and not du and not dd and event=='ok':
+                    continue
                 db.execute('''INSERT INTO samples
                 (collected_at,node_id,node_name,port,tag,raw_up,raw_down,delta_up,delta_down,bill_bytes,rate_snapshot,cost,event)
                 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)''',
