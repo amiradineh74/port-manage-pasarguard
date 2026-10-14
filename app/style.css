@@ -154,3 +154,29 @@ body dialog h2{padding-bottom:8px;border-bottom:1px solid var(--line)}
  .prefs-form{display:grid;grid-template-columns:1fr}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+
+/* Fixed expense ledger, optimized for desktop and mobile without UI libraries. */
+.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
+#expenses .section-head{gap:15px}
+#expenses .table-scroll{overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+#expenses td{vertical-align:middle}
+.cost-actions{display:flex;gap:6px;flex-wrap:wrap}
+.cost-actions button{min-height:38px;padding:8px 12px}
+#expense-dialog{width:min(570px,96vw)}
+#expense-dialog form{display:flex;flex-direction:column;gap:12px}
+#expense-dialog label{display:flex;flex-direction:column;gap:5px;color:var(--muted)}
+#expense-dialog [hidden]{display:none!important}
+.expense-dates{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.expense-dates .jfield{flex:1 1 165px;min-width:0;position:relative}
+.expense-dates .jinput{width:100%;max-width:100%}
+.expense-dates .minor{min-height:42px}
+#expense-dialog input[type=number]{width:100%}
+#expenses-scope-note{padding:6px 0 12px}
+@media(max-width:850px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:550px){
+ .metric{min-height:102px}
+ .expense-dates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .expense-dates .minor{grid-column:1/-1}
+ #expenses .section-head button{width:100%;min-height:44px}
+ #expense-dialog .jcalendar{min-width:260px}
+}
