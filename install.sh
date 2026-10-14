@@ -118,3 +118,9 @@ fi
 PORT="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["listen_port"])' "$INSTALL_DIR/config.json")"
 printf '\nInstallation complete. If you selected localhost, create an SSH tunnel from your PC:\n  ssh -L %s:127.0.0.1:%s root@SERVER_IP\nThen open in your browser: http://127.0.0.1:%s\n' "$PORT" "$PORT" "$PORT"
 echo 'Check status: systemctl status pgtraffic-web pgtraffic-collect.timer --no-pager'
+echo
+read -r -p 'Publish dashboard on a public IP:port using HTTP? (Optional; unencrypted) [y/N]: ' PUBLISH_NOW
+if [[ "$PUBLISH_NOW" =~ ^[Yy]$ ]]; then
+  [[ -f "$ROOT/publish.sh" ]] || { echo 'publish.sh not found. Run bootstrap.sh publish later.'; exit 1; }
+  bash "$ROOT/publish.sh"
+fi
