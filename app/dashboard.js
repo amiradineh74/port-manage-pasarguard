@@ -11,86 +11,121 @@ const money=n=>fmt((n||0)*multiplier())+' '+unit();
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function age(s){if(!s)return '—'; const dt=new Date(s);return dt.toLocaleString('fa-IR',{timeZone:state.timezone,dateStyle:'short',timeStyle:'short'});}
 
-function aggregateSeries(provider,period){
- const rows=(period==='hourly'?state.hourly_by_provider:state.daily_by_provider)||[];
- const byTime=new Map();
- for(const r of rows){
-  if(provider!=='__all__'&&r.provider!==provider)continue;
-  const v=byTime.get(r.period)||{period:r.period,down:0,up:0,billed:0,cost:0,historical_cost:0};
-  for(const key of ['down','up','billed','cost','historical_cost'])v[key]+=Number(r[key]||0);
-  byTime.set(r.period,v);
- }
- return [...byTime.values()].sort((a,b)=>a.period.localeCompare(b.period));
+
+let selectedNode='all';
+const chartColors=['#578bce','#22c55e','#eaad52','#a78bfa','#29bdbd','#e58f9d','#d4dc6a'];
+function visiblePaths(){
+ return state.ports.filter(p=>p.enabled &&
+  (selectedProvider==='__all__'||(p.provider||'بدون ارائه‌دهنده')===selectedProvider) &&
+  (selectedNode==='all'||p.node_id===Number(selectedNode)));
 }
-function drawTrend(target,points,kind){
- const el=$(target);
- if(!points.length){el.textContent='برای این بازه اطلاعاتی ثبت نشده است.';return;}
- const w=1000,h=265,left=57,right=28,top=20,bottom=55;
- const keys=kind==='traffic'?['down','up']:['cost'];
- const values=keys.flatMap(key=>points.map(r=>kind==='traffic'?r[key]/1e9:r[key]*multiplier()));
- const max=Math.max(0.0001,...values)*1.12;
- const xs=i=>left+(w-left-right)*(points.length===1?.5:i/(points.length-1));
- const ys=value=>h-bottom-(h-bottom-top)*value/max;
- let grid='';
- for(let i=0;i<=4;i++){
-   const val=max*i/4,y=ys(val);
-   grid+='<line x1="'+left+'" y1="'+y.toFixed(2)+'" x2="'+(w-right)+'" y2="'+y.toFixed(2)+'" stroke="#294059"/>';
-   const label=kind==='traffic'?fmt(val)+' GB':fmt(val)+' '+unit();
-   grid+='<text x="'+(left-7)+'" y="'+(y+4).toFixed(2)+'" text-anchor="end" fill="#9cafc5" font-size="12">'+escapeHtml(label)+'</text>';
+function summarize(paths){
+ const result={down:0,up:0,billed:0,cost:0,historical_cost:0};
+ for(const p of paths)for(const key of Object.keys(result))result[key]+=Number(p[key]||0);
+ return result;
+}
+function timeseries(period){
+ const rows=(period==='hourly'?state.hourly_by_provider:state.daily_by_provider)||[];
+ const buckets=new Map();
+ for(const row of rows){
+  if(selectedProvider!=='__all__'&&row.provider!==selectedProvider)continue;
+  if(selectedNode!=='all'&&row.node_id!==Number(selectedNode))continue;
+  let group=buckets.get(row.period);
+  if(!group){group=new Map();buckets.set(row.period,group);}
+  let item=group.get(row.node_id);
+  if(!item){item={node_id:row.node_id,node_name:row.node_name,down:0,up:0,cost:0,historical_cost:0};group.set(row.node_id,item);}
+  for(const k of ['down','up','cost','historical_cost'])item[k]+=Number(row[k]||0);
  }
- const step=Math.max(1,Math.ceil(points.length/7));
- for(let i=0;i<points.length;i+=step){
-   grid+='<text x="'+xs(i).toFixed(1)+'" y="'+(h-20)+'" text-anchor="middle" fill="#9cafc5" font-size="12">'+
-     escapeHtml(points[i].period.slice(5).replace('T',' '))+'</text>';
+ return [...buckets.entries()].sort((a,b)=>a[0].localeCompare(b[0]))
+  .map(([period,nodes])=>({period,nodes}));
+}
+const periodLabel=period=>{
+ const date=Jalali.label(period.slice(0,10));
+ return period.length>10?date.slice(5)+' '+period.slice(11,13)+':00':date.slice(5);
+};
+function stackedBars(id,groups,field){
+ const element=$(id);
+ if(!groups.length){element.textContent='در این بازه هنوز نمونه‌ای ثبت نشده است.';return;}
+ const allNodes=new Map();
+ for(const row of state.ports){if(!allNodes.has(row.node_id))allNodes.set(row.node_id,row.node_name);}
+ const selectedIds=[...new Set(groups.flatMap(g=>[...g.nodes.keys()]))].sort((a,b)=>a-b);
+ const colors=new Map([...allNodes.keys()].sort((a,b)=>a-b).map((id,i)=>[id,chartColors[i%chartColors.length]]));
+ const left=90,right=24,top=20,bottom=55,h=305;
+ const w=Math.min(5500,Math.max(940,groups.length*38+left+right));
+ const barArea=w-left-right;
+ const barWidth=Math.max(3,Math.min(65,barArea/groups.length*.68));
+ const amounts=groups.map(g=>[...g.nodes.values()].reduce((acc,node)=>acc+(field==='traffic'?(node.down+node.up)/1e9:node.cost*multiplier()),0));
+ const max=Math.max(.0001,...amounts)*1.12;
+ const y=val=>h-bottom-(h-bottom-top)*val/max;
+ let svg='<svg class="stacked-chart" role="img" aria-label="'+(field==='traffic'?'نمودار ستونی حجم تفکیک نود':'نمودار ستونی هزینه تفکیک نود')+'" viewBox="0 0 '+w+' '+h+'" style="min-width:'+w+'px">';
+ for(let k=0;k<=4;k++){
+  const v=max*k/4,Y=y(v);
+  svg+='<line x1="'+left+'" y1="'+Y+'" x2="'+(w-right)+'" y2="'+Y+'" stroke="#294059"/>';
+  svg+='<text x="'+(left-8)+'" y="'+(Y+4)+'" text-anchor="end" fill="#a6b9d1" font-size="12">'+
+    escapeHtml(fmt(v)+(field==='traffic'?' GB':' '+unit()))+'</text>';
  }
- const colors=['#62aefe','#42d5bd'];
- const paths=keys.map((key,j)=>{
-  const coords=points.map((p,i)=>({x:xs(i),y:ys(kind==='traffic'?p[key]/1e9:p[key]*multiplier())}));
-  const d=coords.map((c,i)=>(i?'L':'M')+c.x.toFixed(1)+' '+c.y.toFixed(1)).join(' ');
-  const dots=coords.map(c=>'<circle cx="'+c.x.toFixed(1)+'" cy="'+c.y.toFixed(1)+'" r="3" fill="'+colors[j]+'"/>').join('');
-  return '<path d="'+d+'" fill="none" stroke="'+colors[j]+'" stroke-width="3" stroke-linejoin="round"/>'+dots;
- }).join('');
- el.innerHTML='<svg viewBox="0 0 '+w+' '+h+'" role="img" aria-label="'+(kind==='traffic'?'روند مصرف':'هزینه تاریخی')+'">'+grid+paths+'</svg>';
+ const step=Math.max(1,Math.ceil(groups.length/10));
+ for(let i=0;i<groups.length;i++){
+  const g=groups[i],x=left+(i+.5)*barArea/groups.length;
+  let sum=0;
+  for(const nid of selectedIds){
+   const item=g.nodes.get(nid);if(!item)continue;
+   const value=field==='traffic'?(item.down+item.up)/1e9:item.cost*multiplier();
+   if(value<=0)continue;
+   const height=(h-bottom-top)*value/max,Y=y(sum+value);
+   const title=periodLabel(g.period)+' | '+item.node_name+
+      (field==='traffic'?' | دانلود '+traffic(item.down)+' | آپلود '+traffic(item.up):' | هزینه '+money(item.cost));
+   svg+='<rect x="'+(x-barWidth/2).toFixed(2)+'" y="'+Y.toFixed(2)+'" width="'+barWidth.toFixed(2)+
+     '" height="'+Math.max(0,height).toFixed(2)+'" rx="2" fill="'+colors.get(nid)+'"><title>'+
+     escapeHtml(title)+'</title></rect>';
+   sum+=value;
+  }
+  if(i%step===0||i===groups.length-1){
+   svg+='<text x="'+x.toFixed(1)+'" y="'+(h-25)+'" text-anchor="middle" fill="#a6b9d1" font-size="12">'+escapeHtml(periodLabel(g.period))+'</text>';
+  }
+ }
+ element.innerHTML=svg+'</svg>';
+ if(id==='chart')$('node-legend').innerHTML=selectedIds.map(nid=>
+  '<span class="legend-node"><i style="background:'+colors.get(nid)+'"></i>'+escapeHtml(allNodes.get(nid)||('Node '+nid))+'</span>').join('');
 }
 function renderProviderPanels(){
  if(!state)return;
- const current=selectedProvider==='__all__'?state.total:state.providers[selectedProvider];
- if(!current){selectedProvider='__all__';return renderProviderPanels();}
+ const paths=visiblePaths(),current=summarize(paths);
  $('down').textContent=traffic(current.down);
  $('up').textContent=traffic(current.up);
  $('billed').textContent=traffic(current.billed);
  $('cost').textContent=money(current.cost);
  $('historical-cost').textContent='هزینه ثبت‌شده قبلی: '+money(current.historical_cost);
  const allLabel='همه ارائه‌دهنده‌ها';
- $('selected-provider-title').textContent='روند مصرف — '+(selectedProvider==='__all__'?allLabel:selectedProvider);
- $('provider-detail').textContent=(selectedProvider==='__all__'?'آمار تجمیعی تمام ارائه‌دهنده‌ها':('آمار اختصاصی '+selectedProvider))+
-    ' | دانلود: '+traffic(current.down)+' | آپلود: '+traffic(current.up)+
-    ' | هزینه با نرخ فعلی: '+money(current.cost)+' | هزینه ثبت‌شده قبلی: '+money(current.historical_cost);
- const entries=[['__all__',state.total],...Object.entries(state.providers).sort((a,b)=>b[1].cost-a[1].cost)];
- $('providers').innerHTML=entries.map(([name,v])=>{
-  const active=name===selectedProvider;
-  const title=name==='__all__'?allLabel:name;
+ $('selected-provider-title').textContent='روند حجم مصرف — '+(selectedProvider==='__all__'?allLabel:selectedProvider);
+ $('provider-detail').textContent=(selectedProvider==='__all__'?'مجموع ارائه‌دهنده‌ها':'ارائه‌دهنده: '+selectedProvider)+
+    ' | دانلود '+traffic(current.down)+' | آپلود '+traffic(current.up)+
+    ' | هزینه با نرخ فعلی '+money(current.cost);
+ const names=new Map([['__all__',summarize(state.ports.filter(p=>p.enabled&&(selectedNode==='all'||p.node_id===Number(selectedNode))))]]);
+ for(const p of state.ports){
+  if(!p.enabled||(selectedNode!=='all'&&p.node_id!==Number(selectedNode)))continue;
+  const key=p.provider||'بدون ارائه‌دهنده';
+  if(!names.has(key))names.set(key,{down:0,up:0,billed:0,cost:0,historical_cost:0});
+  const value=names.get(key);for(const col of Object.keys(value))value[col]+=Number(p[col]||0);
+ }
+ $('providers').innerHTML=[...names.entries()].map(([name,v])=>{
+  const active=name===selectedProvider,title=name==='__all__'?allLabel:name;
   return '<button type="button" class="provider provider-button '+(active?'selected':'')+
     '" data-provider="'+escapeHtml(name)+'" aria-pressed="'+active+'"><strong>'+
-    escapeHtml(title)+'</strong><small>دانلود: '+traffic(v.down)+' · آپلود: '+traffic(v.up)+
-    '</small><small>مصرف مشمول هزینه: '+traffic(v.billed)+
-    '</small><small>هزینه با نرخ فعلی: '+money(v.cost)+
-    '</small><small>هزینه ثبت‌شده قبلی: '+money(v.historical_cost)+'</small></button>';
+    escapeHtml(title)+'</strong><small>دانلود '+traffic(v.down)+' · آپلود '+traffic(v.up)+
+    '</small><small>مصرف مشمول هزینه '+traffic(v.billed)+'</small><small>هزینه '+money(v.cost)+'</small></button>';
  }).join('');
- document.querySelectorAll('.provider-button').forEach(button=>button.addEventListener('click',()=>{
-   selectedProvider=button.dataset.provider;render();
+ document.querySelectorAll('.provider-button').forEach(b=>b.addEventListener('click',()=>{
+  selectedProvider=b.dataset.provider;render();
  }));
  const scale=$('chart-scale').value;
- const hourlyAllowed=Boolean(state.hourly_available);
- const hourly=scale==='hourly'?hourlyAllowed:(scale==='auto'&&hourlyAllowed&&
-    ($('from').value===$('to').value));
- const trend=aggregateSeries(selectedProvider,hourly?'hourly':'daily');
- drawTrend('chart',trend,'traffic');
- $('traffic-chart-caption').textContent=(hourly?'نمای ساعتی':'نمای روزانه')+
-   (scale==='hourly'&&!hourlyAllowed?'؛ بازه انتخابی بزرگ است، نمای روزانه نمایش داده می‌شود':'');
- drawTrend('cost-chart',aggregateSeries(selectedProvider,'daily'),'cost');
+ const hourly=state.hourly_available && (scale==='hourly'||(scale==='auto'&&$('from').value===$('to').value));
+ stackedBars('chart',timeseries(hourly?'hourly':'daily'),'traffic');
+ $('traffic-chart-caption').textContent=(hourly?'تجمیع ساعتی':'تجمیع روزانه')+
+   ' بر اساس UTC؛ برچسب تاریخ‌ها شمسی است'+
+   (scale==='hourly'&&!state.hourly_available?' (برای بازه بیش از ۳۱ روز، تجمیع روزانه انجام شد)':'');
+ stackedBars('cost-chart',timeseries('daily'),'cost');
 }
-
 function render(){if(!state)return;
  $('title').textContent=state.title;
  const lr=state.last_run;
@@ -98,7 +133,7 @@ function render(){if(!state)return;
  $('status').textContent=lr?'آخرین نمونه‌برداری: '+age(lr.collected_at)+' | تعداد نمونه: '+fmt(lr.sample_count)+(JSON.parse(lr.errors_json).length?' | هشدار: '+JSON.parse(lr.errors_json).join('، '):''):'هنوز نمونه‌ای ثبت نشده؛ یک بار دستور collect را اجرا کنید.';
  renderProviderPanels();
  const q=$('search').value.trim().toLowerCase();
- const ports=state.ports.filter(p=>(selectedProvider==='__all__'||(p.provider||'بدون ارائه‌دهنده')===selectedProvider)&&(p.enabled||$('show_hidden').checked)&&[p.node_name,p.port,p.title,p.provider,p.tag].join(' ').toLowerCase().includes(q));
+ const ports=state.ports.filter(p=>(selectedProvider==='__all__'||(p.provider||'بدون ارائه‌دهنده')===selectedProvider)&&(selectedNode==='all'||p.node_id===Number(selectedNode))&&(p.enabled||$('show_hidden').checked)&&[p.node_name,p.port,p.title,p.provider,p.tag].join(' ').toLowerCase().includes(q));
  $('ports').innerHTML=ports.map(p=>`<tr class="${p.enabled?'':'muted'}"><td><strong>${escapeHtml(p.node_name)}</strong><span class="sub">پورت ${p.port} · نود ${p.node_id}</span></td><td>${escapeHtml(p.title||'بدون نام دلخواه')}<span class="sub">${escapeHtml(p.provider||'تعرفه تعیین نشده')} · <span class="tag">${escapeHtml(p.tag)}</span></span></td><td>${traffic(p.down)}</td><td>${traffic(p.up)}</td><td class="money">${money(p.cost)}<span class="sub">قبلی: ${money(p.historical_cost)}</span></td><td>${age(p.last_seen)}</td><td><button class="editbtn" data-nid="${p.node_id}" data-port="${p.port}">ویرایش</button></td></tr>`).join('')||'<tr><td colspan="7">پورتی پیدا نشد.</td></tr>';
  document.querySelectorAll('.editbtn').forEach(btn=>btn.addEventListener('click',()=>openEdit(Number(btn.dataset.nid),Number(btn.dataset.port))));
  $('export').href='/api/export.csv?'+new URLSearchParams({from:$('from').value,to:$('to').value});
@@ -211,7 +246,11 @@ async function reload(){try{
  const url='/api/dashboard?'+new URLSearchParams({from:$('from').value,to:$('to').value});
  const r=await fetch(url,{cache:'no-store'});
  if(r.status===401){location.href='/login';return;}
- const data=await r.json();if(!r.ok)throw Error(data.error||'خطا');state=data;render();renderManagement();
+ const data=await r.json();if(!r.ok)throw Error(data.error||'خطا');state=data;
+ const nodes=[...new Map(state.ports.map(p=>[p.node_id,p.node_name])).entries()].sort((a,b)=>a[0]-b[0]);
+ $('node-filter').innerHTML='<option value="all">همه نودها</option>'+nodes.map(([id,name])=>'<option value="'+id+'">'+escapeHtml(name)+'</option>').join('');
+ $('node-filter').value=selectedNode; if($('node-filter').selectedIndex<0){selectedNode='all';$('node-filter').value='all';}
+ render();renderManagement();
  }catch(e){$('status').className='notice warn';$('status').textContent=e.message;}}
 async function save(e){e.preventDefault();try{
  const body={node_id:Number($('node_id').value),port:Number($('port').value),title:$('port_title').value,
@@ -222,8 +261,13 @@ async function save(e){e.preventDefault();try{
  const resp=await r.json();if(!r.ok)throw Error(resp.error||'خطا');$('edit').close();await reload();
  }catch(e){alert(e.message);}}
 function today(){const d=new Date();return d.toISOString().slice(0,10);}
-const d=new Date();$('to').value=today();d.setDate(d.getDate()-6);$('from').value=d.toISOString().slice(0,10);
+const initialDay=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tehran'}).format(new Date());
+const rangeTo=Jalali.attach('to','to-label','to-calendar',reload);
+const rangeFrom=Jalali.attach('from','from-label','from-calendar',reload);
+rangeTo.set(initialDay);
+rangeFrom.set(new Date(Date.parse(initialDay+'T00:00:00Z')-6*86400000).toISOString().slice(0,10));
 $('reload').addEventListener('click',reload);
+$('node-filter').addEventListener('change',()=>{selectedNode=$('node-filter').value;render();});
 $('chart-scale').addEventListener('change',renderProviderPanels);$('search').addEventListener('input',render);$('show_hidden').addEventListener('change',render);
 $('display-form').addEventListener('submit',saveDisplaySettings);
 $('editform').addEventListener('submit',save);$('cancel').addEventListener('click',()=>$('edit').close());
