@@ -37,7 +37,7 @@ function attach(field,displayId,popoverId,onChange){
  }
  display.addEventListener('click',()=>{open=!open;popup.hidden=!open;if(open)render();});
  document.addEventListener('pointerdown',e=>{if(open&&!popup.contains(e.target)&&e.target!==display){open=false;popup.hidden=true;}});
- return {set,get:()=>hidden.value};
+ return {set,clear:()=>{hidden.value='';display.value='';},get:()=>hidden.value};
 }
 return {attach,label,fromISO,toISO};
 })();
