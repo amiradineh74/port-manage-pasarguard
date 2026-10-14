@@ -18,10 +18,10 @@ DEFAULT = {
  'listen_host':'127.0.0.1',
  'listen_port':8791,
  'timezone':'Asia/Tehran',
- 'title':'مدیریت مصرف و هزینه پورت‌ها',
+ 'title':'Port Traffic & Cost Monitor',
  'default_bill_direction':'downlink',
  'default_price_per_gb':0,
- 'currency':'تومان',
+ 'currency':'Toman',
  'exclude_ports':[22022],
  'ssl_cert':'', 'ssl_key':'',
 }
@@ -35,7 +35,7 @@ def ask(prompt,default='', validator=None, convert=str):
             if validator and not validator(out): raise ValueError('invalid')
             return out
         except (TypeError,ValueError):
-            print('مقدار معتبر نیست؛ دوباره وارد کنید.')
+            print('Invalid value. Please try again.')
 
 def yesno(prompt,default=False):
     label='Y/n' if default else 'y/N'
@@ -44,7 +44,7 @@ def yesno(prompt,default=False):
         if not s:return default
         if s in ('y','yes','بله','آره'):return True
         if s in ('n','no','نه'):return False
-        print('لطفاً y یا n وارد کنید.')
+        print('Please enter y or n.')
 
 def main():
     dest=Path(sys.argv[1]) if len(sys.argv)>1 else Path('/opt/pg-traffic-monitor/config.json')
@@ -52,50 +52,50 @@ def main():
     if dest.exists():
         with dest.open(encoding='utf-8') as f: old=json.load(f)
         cfg.update(old)
-        if not yesno('تنظیمات موجود ویرایش شود؟',False):
-            print('بدون تغییر');return 0
+        if not yesno('Edit existing settings?',False):
+            print('No changes made');return 0
         from datetime import datetime
         import shutil
         backup=dest.with_name('config.backup-'+datetime.now().strftime('%Y%m%d%H%M%S')+'.json')
         shutil.copy2(dest,backup)
-        print('نسخه پشتیبان:',backup)
-    print('\n=== نصب تعاملی | همه تنظیمات اصلی ===\n')
-    cfg['panel_container']=ask('نام کانتینر پنل PasarGuard',cfg['panel_container'])
-    cfg['panel_python']=ask('مسیر پایتون داخل کانتینر',cfg['panel_python'])
-    ips=ask('IP نودها، جدا با ویرگول (all=همه نودها)',','.join(cfg['node_ips']) or 'all')
+        print('Backup saved:',backup)
+    print('\n=== Interactive setup | Main settings ===\n')
+    cfg['panel_container']=ask('PasarGuard panel container name',cfg['panel_container'])
+    cfg['panel_python']=ask('Python path inside the panel container',cfg['panel_python'])
+    ips=ask('Node IPs (comma-separated; all = every node)',','.join(cfg['node_ips']) or 'all')
     cfg['node_ips']=[x.strip() for x in ips.split(',') if x.strip()] if ips.lower() not in ('all','همه','-') else []
-    cfg['data_dir']=ask('مسیر نگهداری دیتابیس مستقل',cfg['data_dir'],lambda s:s.startswith('/'))
-    cfg['poll_interval']=ask('فاصله آمارگیری به ثانیه (حداقل ۶۰)',cfg['poll_interval'],lambda n:60<=n<=86400,int)
-    cfg['title']=ask('عنوان داشبورد',cfg['title'])
+    cfg['data_dir']=ask('Independent database directory',cfg['data_dir'],lambda s:s.startswith('/'))
+    cfg['poll_interval']=ask('Collection interval in seconds (minimum 60)',cfg['poll_interval'],lambda n:60<=n<=86400,int)
+    cfg['title']=ask('Dashboard title',cfg['title'])
     def timezone_ok(value):
         try:ZoneInfo(value);return True
         except Exception:return False
-    cfg['timezone']=ask('منطقه زمانی گزارش‌ها',cfg['timezone'],timezone_ok)
-    cfg['listen_host']=ask('آدرس گوش‌دادن وب (127.0.0.1 امن‌تر)',cfg['listen_host'])
-    cfg['listen_port']=ask('پورت داشبورد',cfg['listen_port'],lambda n:1024<=n<=65535,int)
-    cfg['currency']=ask('واحد پول',cfg['currency'])
-    cfg['default_bill_direction']=ask('جهت محاسبه پیش‌فرض: downlink/uplink/both',cfg['default_bill_direction'],lambda s:s in ('downlink','uplink','both'))
-    cfg['default_price_per_gb']=ask('هزینه پیش‌فرض هر GB (صفر=بعداً برای هر پورت)',cfg['default_price_per_gb'],lambda n:0<=n<1e12,float)
-    ports=ask('پورت‌های مستثنی از آمارگیری، جدا با ویرگول',' ,'.join(map(str,cfg['exclude_ports'])))
+    cfg['timezone']=ask('Reporting timezone',cfg['timezone'],timezone_ok)
+    cfg['listen_host']=ask('Web listen address (127.0.0.1 recommended)',cfg['listen_host'])
+    cfg['listen_port']=ask('Dashboard port',cfg['listen_port'],lambda n:1024<=n<=65535,int)
+    cfg['currency']=ask('Currency label',cfg['currency'])
+    cfg['default_bill_direction']=ask('Default billed direction: downlink/uplink/both',cfg['default_bill_direction'],lambda s:s in ('downlink','uplink','both'))
+    cfg['default_price_per_gb']=ask('Default rate per GB (0 = configure later per port)',cfg['default_price_per_gb'],lambda n:0<=n<1e12,float)
+    ports=ask('Excluded ports (comma-separated)',' ,'.join(map(str,cfg['exclude_ports'])))
     cfg['exclude_ports']=[int(x.strip()) for x in ports.split(',') if x.strip()]
     if cfg['listen_host'] not in ('127.0.0.1','::1','localhost'):
-        print('\nهشدار: اتصال عمومی باید پشت HTTPS محافظت شود. وب HTTP عمومی امن نیست.')
-        if not yesno('گواهی TLS معتبر برای خود برنامه دارید؟',False):
-            raise SystemExit('نصب متوقف شد؛ برای امنیت ابتدا localhost را انتخاب کنید.')
-        cfg['ssl_cert']=ask('مسیر مطلق فایل گواهی TLS',cfg.get('ssl_cert',''),lambda s:Path(s).is_file())
-        cfg['ssl_key']=ask('مسیر مطلق کلید TLS (دسترسی فقط کاربر سرویس)',cfg.get('ssl_key',''),lambda s:Path(s).is_file())
+        print('\nWARNING: Public access must use HTTPS. Public HTTP is insecure.')
+        if not yesno('Do you have a valid TLS certificate for this application?',False):
+            raise SystemExit('Setup stopped. Choose localhost for a safer initial installation.')
+        cfg['ssl_cert']=ask('Absolute path to TLS certificate',cfg.get('ssl_cert',''),lambda s:Path(s).is_file())
+        cfg['ssl_key']=ask('Absolute path to TLS private key (readable by service user)',cfg.get('ssl_key',''),lambda s:Path(s).is_file())
     else:
         cfg['ssl_cert']='';cfg['ssl_key']=''
-    cfg['username']=ask('نام کاربری ورود به داشبورد',cfg.get('username','admin'),lambda s:1<=len(s)<=48)
-    print('رمز عبور در ترمینال نمایش داده نمی‌شود.')
+    cfg['username']=ask('Dashboard login username',cfg.get('username','admin'),lambda s:1<=len(s)<=48)
+    print('The password will not be displayed in the terminal.')
     while True:
-        p1=getpass.getpass('رمز عبور (حداقل ۱۲ کاراکتر؛ خالی=حفظ قبلی): ')
+        p1=getpass.getpass('Password (minimum 12 characters; blank = keep existing): ')
         if not p1 and cfg.get('password_hash'): break
         if len(p1)<12:
-            print('رمز کوتاه است.');continue
-        p2=getpass.getpass('تکرار رمز: ')
+            print('Password is too short.');continue
+        p2=getpass.getpass('Confirm password: ')
         if p1!=p2:
-            print('دو رمز یکسان نیستند.');continue
+            print('Passwords do not match.');continue
         salt=secrets.token_bytes(16)
         iterations=310000
         pw=hashlib.pbkdf2_hmac('sha256',p1.encode('utf-8'),salt,iterations)
@@ -107,10 +107,10 @@ def main():
     temp.write_text(json.dumps(cfg,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     os.chmod(temp,0o640)
     os.replace(temp,dest)
-    print('\nتنظیمات ذخیره شد:',dest)
-    print('رمز عبور فقط به صورت هش ذخیره شده است.')
+    print('\nConfiguration saved:',dest)
+    print('Password is stored as a secure hash only.')
     return 0
 
 if __name__=='__main__':
     try:sys.exit(main())
-    except (EOFError,KeyboardInterrupt):print('\nنصب لغو شد.');sys.exit(130)
+    except (EOFError,KeyboardInterrupt):print('\nSetup cancelled.');sys.exit(130)
