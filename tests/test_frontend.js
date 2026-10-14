@@ -19,6 +19,12 @@ const Jalali={...realJalali,attach(field,displayId){
     get(){return elem(field).value;}
   };
 }};
+const dashboardTemplate=fs.readFileSync(path.join(__dirname,'../app/dashboard.html'),'utf8');
+const navigationLabels=['نمای کلی','نمودار و ارائه‌دهندگان','گزارش پورت‌ها','مدیریت پورت‌ها','هزینه‌های ثابت','تنظیمات'];
+for(const name of navigationLabels)assert.ok(dashboardTemplate.includes('>'+name+'</a>'),'missing navigation: '+name);
+assert.ok(dashboardTemplate.indexOf('id="expenses"')>dashboardTemplate.indexOf('id="manage"'),
+ 'Fixed costs must follow management/settings section');
+assert.ok(dashboardTemplate.includes('class="expense-formula"'));
 const storage=new Map();
 const daily=[
  {period:'2026-10-14',node_id:3,node_name:'Turkey',provider:'A',down:2000000000,up:500000000,cost:120.234,historical_cost:15},
