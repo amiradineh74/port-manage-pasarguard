@@ -18,8 +18,14 @@ class FixedExpenseTests(unittest.TestCase):
         e=self.item()
         self.assertEqual(charge_in_range(e,'2026-10-01','2026-10-31'),310000)
         self.assertEqual(charge_in_range(e,'2026-10-14','2026-10-23'),100000)
+        from fixed_costs import expense_breakdown
+        self.assertEqual([(p['covered_days'],p['month_days']) for p in
+            expense_breakdown(e,'2026-10-14','2026-10-23')],[(10,31)])
         self.assertEqual(charge_in_range(e,'2026-09-01','2026-09-30'),0)
         self.assertEqual(charge_in_range(e,'2026-10-30','2026-11-02'),40666.67)
+        self.assertEqual([(x['month'],x['covered_days'],x['month_days']) for x in
+            expense_breakdown(e,'2026-10-30','2026-11-02')],
+            [('2026-10',2,31),('2026-11',2,30)])
     def test_february_leap_and_one_time(self):
         e=self.item(start_date='2028-02-01',amount_rial=290000)
         self.assertEqual(charge_in_range(e,'2028-02-01','2028-02-29'),290000)
