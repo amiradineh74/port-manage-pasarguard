@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import secrets
+import subprocess
 import sys
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -12,7 +13,8 @@ from zoneinfo import ZoneInfo
 DEFAULT = {
  'panel_container':'pasarguard-pasarguard-1',
  'panel_python':'/code/.venv/bin/python',
- 'node_ips':[],
+ 'node_ids':[],
+ 'monitor_all_nodes':False,
  'data_dir':os.environ.get('PGTM_DEFAULT_DIR','/opt/pg-traffic-monitor')+'/data',
  'poll_interval':60,
  'listen_host':'127.0.0.1',
@@ -46,6 +48,60 @@ def yesno(prompt,default=False):
         if s in ('n','no','نه'):return False
         print('Please enter y or n.')
 
+def list_nodes(panel_container, panel_python):
+    """Discover IDs and display names, without exposing node API credentials."""
+    code=Path(__file__).with_name('discover_nodes.py').read_text(encoding='utf-8')
+    result=subprocess.run(
+        ['docker','exec','-i',panel_container,panel_python,'-'],
+        input=code, capture_output=True, text=True, timeout=25, check=False
+    )
+    if result.returncode:
+        raise RuntimeError('Could not read PasarGuard node list from the panel container.')
+    try:
+        nodes=json.loads(result.stdout.strip())
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise RuntimeError('Invalid response from the panel container.') from exc
+    if not isinstance(nodes,list) or not all(
+        isinstance(n,dict) and type(n.get('id')) is int and n['id'] > 0
+        and isinstance(n.get('name'),str) for n in nodes
+    ):
+        raise RuntimeError('Invalid node list format.')
+    if not nodes:
+        raise RuntimeError('No PasarGuard nodes found. Cannot continue setup.')
+    return nodes
+
+
+def choose_nodes(cfg, nodes):
+    """Require explicit node choice; selection is bound to stable node IDs."""
+    available={n['id'] for n in nodes}
+    print('\\n=== Available PasarGuard nodes ===')
+    for node in nodes:
+        print('ID %s: %s' % (node['id'],node['name']))
+    if cfg.get('node_ips'):
+        print('NOTE: Previous IP-based selection is obsolete. Select node IDs below.')
+    selected=cfg.get('node_ids',[])
+    previous='all' if cfg.get('monitor_all_nodes',False) else ','.join(map(str,selected))
+    while True:
+        choice=input('Node IDs (comma-separated), or all [%s]: ' % (previous or 'required')).strip()
+        if not choice:
+            choice=previous
+        if choice.lower()=='all':
+            cfg['monitor_all_nodes']=True
+            cfg['node_ids']=[]
+            break
+        try:
+            ids=[int(x.strip()) for x in choice.split(',')]
+            if not ids or len(ids)!=len(set(ids)) or not all(x in available for x in ids):
+                raise ValueError
+        except (ValueError,TypeError):
+            print('Invalid selection. Enter listed node IDs or all.')
+            continue
+        cfg['monitor_all_nodes']=False
+        cfg['node_ids']=ids
+        break
+    cfg.pop('node_ips',None)
+
+
 def main():
     dest=Path(sys.argv[1]) if len(sys.argv)>1 else Path('/opt/pg-traffic-monitor/config.json')
     cfg=dict(DEFAULT)
@@ -62,8 +118,12 @@ def main():
     print('\n=== Interactive setup | Main settings ===\n')
     cfg['panel_container']=ask('PasarGuard panel container name',cfg['panel_container'])
     cfg['panel_python']=ask('Python path inside the panel container',cfg['panel_python'])
-    ips=ask('Node IPs (comma-separated; all = every node)',','.join(cfg['node_ips']) or 'all')
-    cfg['node_ips']=[x.strip() for x in ips.split(',') if x.strip()] if ips.lower() not in ('all','همه','-') else []
+    print('Reading available nodes from PasarGuard (read-only)...')
+    try:
+        nodes=list_nodes(cfg['panel_container'],cfg['panel_python'])
+    except (OSError,subprocess.TimeoutExpired,RuntimeError) as exc:
+        raise SystemExit('Node discovery failed: %s No settings were saved.' % exc)
+    choose_nodes(cfg,nodes)
     cfg['data_dir']=ask('Independent database directory',cfg['data_dir'],lambda s:s.startswith('/'))
     cfg['poll_interval']=ask('Collection interval in seconds (minimum 60)',cfg['poll_interval'],lambda n:60<=n<=86400,int)
     cfg['title']=ask('Dashboard title',cfg['title'])
