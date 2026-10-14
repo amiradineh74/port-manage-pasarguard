@@ -1,32 +1,104 @@
 'use strict';
 const $=id=>document.getElementById(id);
 let state=null;
+let selectedProvider='__all__';
 const fmt=n=>new Intl.NumberFormat('fa-IR',{maximumFractionDigits:2}).format(n||0);
 const traffic=n=>(n/1e9>=1?fmt(n/1e9)+' GB':fmt(n/1e6)+' MB');
-const money=n=>fmt(n)+' '+(state?.currency||'تومان');
+const isRial=()=>['ریال','Rial','IRR'].includes(state?.currency);
+const unit=()=>isRial()?'ریال':'تومان';
+const multiplier=()=>isRial()?10:1;
+const money=n=>fmt((n||0)*multiplier())+' '+unit();
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function age(s){if(!s)return '—'; const dt=new Date(s);return dt.toLocaleString('fa-IR',{timeZone:state.timezone,dateStyle:'short',timeStyle:'short'});}
-function chart(points){if(!points.length){$('chart').textContent='برای این بازه هنوز داده‌ای ثبت نشده است.';return;}
- const w=1000,h=240,pad=35,max=Math.max(1,...points.flatMap(x=>[x.down,x.up]));
- const xs=i=>pad+(w-2*pad)*i/Math.max(1,points.length-1),ys=y=>h-pad-(h-2*pad)*y/max;
- const line=(key,color)=>`<path d="${points.map((v,i)=>(i?'L':'M')+xs(i).toFixed(1)+' '+ys(v[key]).toFixed(1)).join(' ')}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`;
- let grid='';for(let i=0;i<=4;i++){const y=pad+(h-2*pad)*i/4;grid+=`<line x1="${pad}" y1="${y}" x2="${w-pad}" y2="${y}" stroke="#294059" stroke-width="1"/>`;}
- $('chart').innerHTML=`<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="نمودار دانلود و آپلود روزانه">${grid}${line('down','#62aefe')}${line('up','#42d5bd')}</svg>`;
+
+function aggregateSeries(provider,period){
+ const rows=(period==='hourly'?state.hourly_by_provider:state.daily_by_provider)||[];
+ const byTime=new Map();
+ for(const r of rows){
+  if(provider!=='__all__'&&r.provider!==provider)continue;
+  const v=byTime.get(r.period)||{period:r.period,down:0,up:0,billed:0,cost:0,historical_cost:0};
+  for(const key of ['down','up','billed','cost','historical_cost'])v[key]+=Number(r[key]||0);
+  byTime.set(r.period,v);
+ }
+ return [...byTime.values()].sort((a,b)=>a.period.localeCompare(b.period));
 }
+function drawTrend(target,points,kind){
+ const el=$(target);
+ if(!points.length){el.textContent='برای این بازه اطلاعاتی ثبت نشده است.';return;}
+ const w=1000,h=265,left=57,right=28,top=20,bottom=55;
+ const keys=kind==='traffic'?['down','up']:['cost'];
+ const values=keys.flatMap(key=>points.map(r=>kind==='traffic'?r[key]/1e9:r[key]*multiplier()));
+ const max=Math.max(0.0001,...values)*1.12;
+ const xs=i=>left+(w-left-right)*(points.length===1?.5:i/(points.length-1));
+ const ys=value=>h-bottom-(h-bottom-top)*value/max;
+ let grid='';
+ for(let i=0;i<=4;i++){
+   const val=max*i/4,y=ys(val);
+   grid+='<line x1="'+left+'" y1="'+y.toFixed(2)+'" x2="'+(w-right)+'" y2="'+y.toFixed(2)+'" stroke="#294059"/>';
+   const label=kind==='traffic'?fmt(val)+' GB':fmt(val)+' '+unit();
+   grid+='<text x="'+(left-7)+'" y="'+(y+4).toFixed(2)+'" text-anchor="end" fill="#9cafc5" font-size="12">'+escapeHtml(label)+'</text>';
+ }
+ const step=Math.max(1,Math.ceil(points.length/7));
+ for(let i=0;i<points.length;i+=step){
+   grid+='<text x="'+xs(i).toFixed(1)+'" y="'+(h-20)+'" text-anchor="middle" fill="#9cafc5" font-size="12">'+
+     escapeHtml(points[i].period.slice(5).replace('T',' '))+'</text>';
+ }
+ const colors=['#62aefe','#42d5bd'];
+ const paths=keys.map((key,j)=>{
+  const coords=points.map((p,i)=>({x:xs(i),y:ys(kind==='traffic'?p[key]/1e9:p[key]*multiplier())}));
+  const d=coords.map((c,i)=>(i?'L':'M')+c.x.toFixed(1)+' '+c.y.toFixed(1)).join(' ');
+  const dots=coords.map(c=>'<circle cx="'+c.x.toFixed(1)+'" cy="'+c.y.toFixed(1)+'" r="3" fill="'+colors[j]+'"/>').join('');
+  return '<path d="'+d+'" fill="none" stroke="'+colors[j]+'" stroke-width="3" stroke-linejoin="round"/>'+dots;
+ }).join('');
+ el.innerHTML='<svg viewBox="0 0 '+w+' '+h+'" role="img" aria-label="'+(kind==='traffic'?'روند مصرف':'هزینه تاریخی')+'">'+grid+paths+'</svg>';
+}
+function renderProviderPanels(){
+ if(!state)return;
+ const current=selectedProvider==='__all__'?state.total:state.providers[selectedProvider];
+ if(!current){selectedProvider='__all__';return renderProviderPanels();}
+ $('down').textContent=traffic(current.down);
+ $('up').textContent=traffic(current.up);
+ $('billed').textContent=traffic(current.billed);
+ $('cost').textContent=money(current.cost);
+ $('historical-cost').textContent='هزینه ثبت‌شده قبلی: '+money(current.historical_cost);
+ const allLabel='همه ارائه‌دهنده‌ها';
+ $('selected-provider-title').textContent='روند مصرف — '+(selectedProvider==='__all__'?allLabel:selectedProvider);
+ $('provider-detail').textContent=(selectedProvider==='__all__'?'آمار تجمیعی تمام ارائه‌دهنده‌ها':('آمار اختصاصی '+selectedProvider))+
+    ' | دانلود: '+traffic(current.down)+' | آپلود: '+traffic(current.up)+
+    ' | هزینه با نرخ فعلی: '+money(current.cost)+' | هزینه ثبت‌شده قبلی: '+money(current.historical_cost);
+ const entries=[['__all__',state.total],...Object.entries(state.providers).sort((a,b)=>b[1].cost-a[1].cost)];
+ $('providers').innerHTML=entries.map(([name,v])=>{
+  const active=name===selectedProvider;
+  const title=name==='__all__'?allLabel:name;
+  return '<button type="button" class="provider provider-button '+(active?'selected':'')+
+    '" data-provider="'+escapeHtml(name)+'" aria-pressed="'+active+'"><strong>'+
+    escapeHtml(title)+'</strong><small>دانلود: '+traffic(v.down)+' · آپلود: '+traffic(v.up)+
+    '</small><small>مصرف مشمول هزینه: '+traffic(v.billed)+
+    '</small><small>هزینه با نرخ فعلی: '+money(v.cost)+
+    '</small><small>هزینه ثبت‌شده قبلی: '+money(v.historical_cost)+'</small></button>';
+ }).join('');
+ document.querySelectorAll('.provider-button').forEach(button=>button.addEventListener('click',()=>{
+   selectedProvider=button.dataset.provider;render();
+ }));
+ const scale=$('chart-scale').value;
+ const hourlyAllowed=Boolean(state.hourly_available);
+ const hourly=scale==='hourly'?hourlyAllowed:(scale==='auto'&&hourlyAllowed&&
+    ($('from').value===$('to').value));
+ const trend=aggregateSeries(selectedProvider,hourly?'hourly':'daily');
+ drawTrend('chart',trend,'traffic');
+ $('traffic-chart-caption').textContent=(hourly?'نمای ساعتی':'نمای روزانه')+
+   (scale==='hourly'&&!hourlyAllowed?'؛ بازه انتخابی بزرگ است، نمای روزانه نمایش داده می‌شود':'');
+ drawTrend('cost-chart',aggregateSeries(selectedProvider,'daily'),'cost');
+}
+
 function render(){if(!state)return;
  $('title').textContent=state.title;
- $('down').textContent=traffic(state.total.down);
- $('up').textContent=traffic(state.total.up);
- $('billed').textContent=traffic(state.total.billed);
- $('cost').textContent=money(state.total.cost);
- $('historical-cost').textContent='هزینه ثبت‌شده قبلی: '+money(state.total.historical_cost);
  const lr=state.last_run;
  $('status').className='notice'+(lr&&JSON.parse(lr.errors_json).length?' warn':'');
  $('status').textContent=lr?'آخرین نمونه‌برداری: '+age(lr.collected_at)+' | تعداد نمونه: '+fmt(lr.sample_count)+(JSON.parse(lr.errors_json).length?' | هشدار: '+JSON.parse(lr.errors_json).join('، '):''):'هنوز نمونه‌ای ثبت نشده؛ یک بار دستور collect را اجرا کنید.';
- chart(state.daily);
- $('providers').innerHTML=Object.entries(state.providers).sort((a,b)=>b[1].cost-a[1].cost).map(([name,p])=>`<div class="provider"><strong>${escapeHtml(name)}</strong><small>مصرف مشمول هزینه: ${traffic(p.billed)}</small><small>هزینه با نرخ فعلی: ${money(p.cost)}</small><small>هزینه ثبت‌شده قبلی: ${money(p.historical_cost)}</small></div>`).join('')||'<p>آماری وجود ندارد.</p>';
+ renderProviderPanels();
  const q=$('search').value.trim().toLowerCase();
- const ports=state.ports.filter(p=>(p.enabled||$('show_hidden').checked)&&[p.node_name,p.port,p.title,p.provider,p.tag].join(' ').toLowerCase().includes(q));
+ const ports=state.ports.filter(p=>(selectedProvider==='__all__'||(p.provider||'بدون ارائه‌دهنده')===selectedProvider)&&(p.enabled||$('show_hidden').checked)&&[p.node_name,p.port,p.title,p.provider,p.tag].join(' ').toLowerCase().includes(q));
  $('ports').innerHTML=ports.map(p=>`<tr class="${p.enabled?'':'muted'}"><td><strong>${escapeHtml(p.node_name)}</strong><span class="sub">پورت ${p.port} · نود ${p.node_id}</span></td><td>${escapeHtml(p.title||'بدون نام دلخواه')}<span class="sub">${escapeHtml(p.provider||'تعرفه تعیین نشده')} · <span class="tag">${escapeHtml(p.tag)}</span></span></td><td>${traffic(p.down)}</td><td>${traffic(p.up)}</td><td class="money">${money(p.cost)}<span class="sub">قبلی: ${money(p.historical_cost)}</span></td><td>${age(p.last_seen)}</td><td><button class="editbtn" data-nid="${p.node_id}" data-port="${p.port}">ویرایش</button></td></tr>`).join('')||'<tr><td colspan="7">پورتی پیدا نشد.</td></tr>';
  document.querySelectorAll('.editbtn').forEach(btn=>btn.addEventListener('click',()=>openEdit(Number(btn.dataset.nid),Number(btn.dataset.port))));
  $('export').href='/api/export.csv?'+new URLSearchParams({from:$('from').value,to:$('to').value});
@@ -94,7 +166,8 @@ async function saveDisplaySettings(e){
 }
 function openEdit(node,port){const p=state.ports.find(x=>x.node_id===node&&x.port===port);if(!p)return;
  $('editing').textContent=p.port+' / '+p.node_name; $('node_id').value=node; $('port').value=port;
- $('port_title').value=p.title; $('provider').value=p.provider; $('rate').value=p.price_per_gb;
+ $('port_title').value=p.title; $('provider').value=p.provider; $('rate').value=p.price_per_gb*multiplier();
+ $('rate-unit').textContent=unit();
  $('direction').value=p.bill_direction;$('notes').value=p.notes;$('enabled').checked=!!p.enabled;
  $('since').value=p.billing_since?p.billing_since.slice(0,16):'';
  $('edit').showModal();}
@@ -106,7 +179,7 @@ async function reload(){try{
  }catch(e){$('status').className='notice warn';$('status').textContent=e.message;}}
 async function save(e){e.preventDefault();try{
  const body={node_id:Number($('node_id').value),port:Number($('port').value),title:$('port_title').value,
-  provider:$('provider').value,price_per_gb:Number($('rate').value),bill_direction:$('direction').value,
+  provider:$('provider').value,price_per_gb:Number($('rate').value)/multiplier(),bill_direction:$('direction').value,
   billing_since:$('since').value?new Date($('since').value+'Z').toISOString():'',
   notes:$('notes').value,enabled:$('enabled').checked};
  const r=await fetch('/api/metadata',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':state.csrf},body:JSON.stringify(body)});
@@ -114,7 +187,8 @@ async function save(e){e.preventDefault();try{
  }catch(e){alert(e.message);}}
 function today(){const d=new Date();return d.toISOString().slice(0,10);}
 const d=new Date();$('to').value=today();d.setDate(d.getDate()-6);$('from').value=d.toISOString().slice(0,10);
-$('reload').addEventListener('click',reload);$('search').addEventListener('input',render);$('show_hidden').addEventListener('change',render);
+$('reload').addEventListener('click',reload);
+$('chart-scale').addEventListener('change',renderProviderPanels);$('search').addEventListener('input',render);$('show_hidden').addEventListener('change',render);
 $('display-form').addEventListener('submit',saveDisplaySettings);
 $('editform').addEventListener('submit',save);$('cancel').addEventListener('click',()=>$('edit').close());
 $('logout').addEventListener('click',async()=>{if(!state){location.href='/login';return;}await fetch('/api/logout',{method:'POST',headers:{'X-CSRF-Token':state.csrf}});location.href='/login';});
