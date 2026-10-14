@@ -84,10 +84,34 @@ def charge_in_range(expense,lo,hi):
         cursor=following
     return round(result,2)
 
+def expense_breakdown(expense,lo,hi):
+    """Small audit description per covered Gregorian month (no DB writes)."""
+    start=date_value(expense['start_date'])
+    until=date_value(expense['end_date'],False)
+    a=max(date_value(lo),start)
+    b=min(date_value(hi),until) if until else date_value(hi)
+    if a>b:return []
+    if expense['frequency']=='once':
+        return [{'frequency':'once','date':start.isoformat(),
+                 'rial':expense['amount_rial']}]
+    parts=[]
+    cursor=a
+    while cursor<=b:
+        next_month=month_after(cursor)
+        last=min(b,next_month-timedelta(days=1))
+        count=(last-cursor).days+1
+        month_days=calendar.monthrange(cursor.year,cursor.month)[1]
+        parts.append({'frequency':'monthly','month':cursor.strftime('%Y-%m'),
+                      'covered_days':count,'month_days':month_days,
+                      'rial':round(expense['amount_rial']*count/month_days,2)})
+        cursor=next_month
+    return parts
+
 def expenses_report(db,lo,hi):
     expenses=[dict(r) for r in db.execute('SELECT * FROM fixed_expenses ORDER BY scope,label,id')]
     for expense in expenses:
         expense['period_rial']=charge_in_range(expense,lo,hi)
+        expense['breakdown']=expense_breakdown(expense,lo,hi)
     return expenses
 
 def fixed_total(expenses):
