@@ -33,3 +33,26 @@
 .port-manual{direction:ltr;text-align:left;width:100%;font-family:Consolas,monospace;font-size:14px}
 .node-card .port-checks{margin:12px 0}
 .node-card .buttons{gap:8px}
+
+
+/* V1: PasarGuard-inspired stacked bars and Jalali range picker */
+.provider-analysis{background:#111c2b}
+.chart-heading{margin-top:24px}
+.cost-heading{padding-top:24px;border-top:1px solid var(--line);margin-top:18px}
+.chart{justify-content:flex-start;overflow-x:auto;overflow-y:hidden;width:100%;scrollbar-width:thin}
+.chart svg.stacked-chart{height:auto;min-height:275px;max-height:350px;overflow:visible;flex-shrink:0}
+.node-legend{display:flex;flex-wrap:wrap;gap:18px;padding:6px 2px 12px}
+.legend-node{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}
+.legend-node i{display:inline-block;width:12px;height:12px;border-radius:3px}
+.jfield{position:relative;display:flex;flex-direction:column;min-width:165px}
+.jinput{cursor:pointer;width:170px;direction:ltr;text-align:center}
+.jcalendar{position:absolute;top:100%;right:0;z-index:10;background:#15273c;border:1px solid #426384;border-radius:14px;padding:14px;box-shadow:0 12px 40px #000a;min-width:292px;direction:rtl}
+.jcalendar[hidden]{display:none}
+.jnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}
+.jnav strong{font-size:15px}
+.jnav button{font-size:25px;padding:0 13px;background:#19334e}
+.jgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;text-align:center}
+.jweekday{font-size:12px;color:#93a8c0;padding:7px 0}
+.jday{padding:9px 0;border:0;background:transparent;text-align:center;min-width:34px;font-size:13px}
+.jday:hover,.jday.chosen{background:var(--blue);color:#071525;font-weight:700}
+@media(max-width:600px){.jcalendar{right:auto;left:0}.jfield{min-width:120px}.jinput{width:135px}.chart svg.stacked-chart{min-height:275px}}
