@@ -14,4 +14,5 @@ jobs:
         run: |
           python -m compileall -q app tests
           python -m unittest discover -s tests -v
-          bash -n install.sh update.sh uninstall.sh bootstrap.sh publish.sh
+          bash -n bootstrap.sh install.sh update.sh uninstall.sh publish.sh
+          node --check app/dashboard.js bootstrap.sh publish.sh
