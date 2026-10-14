@@ -53,6 +53,24 @@ CREATE TABLE IF NOT EXISTS poll_runs (
   errors_json TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS fixed_expenses (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ label TEXT NOT NULL CHECK(length(label) BETWEEN 1 AND 128),
+ category TEXT NOT NULL DEFAULT 'other',
+ scope TEXT NOT NULL CHECK(scope IN ('general','node','provider')),
+ node_id INTEGER,
+ provider TEXT NOT NULL DEFAULT '',
+ frequency TEXT NOT NULL CHECK(frequency IN ('monthly','once')),
+ amount_rial INTEGER NOT NULL CHECK(amount_rial >= 0 AND amount_rial <= 100000000000000),
+ start_date TEXT NOT NULL,
+ end_date TEXT NOT NULL DEFAULT '',
+ note TEXT NOT NULL DEFAULT '',
+ CHECK((scope='node' AND node_id IS NOT NULL AND node_id > 0 AND provider='')
+    OR (scope='provider' AND node_id IS NULL AND length(provider)>0)
+    OR (scope='general' AND node_id IS NULL AND provider=''))
+);
+CREATE INDEX IF NOT EXISTS idx_fixed_expenses_dates ON fixed_expenses(start_date,end_date);
+
 """
 
 def connect(db_file):
