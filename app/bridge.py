@@ -11,7 +11,25 @@ from config import database_settings
 from PasarGuardNodeBridge import NodeType, create_node
 from PasarGuardNodeBridge.common.service_pb2 import StatType
 
-TARGET_IPS = set(sys.argv[1:])
+# Choose stable PasarGuard node IDs, never IP addresses.
+# The current node address, ports and credentials are fetched from the panel on every poll.
+NODE_ARGS = sys.argv[1:]
+MONITOR_ALL = NODE_ARGS == ["--all"]
+if not MONITOR_ALL and (
+    not NODE_ARGS or any(not x.isdecimal() or int(x) < 1 for x in NODE_ARGS)
+):
+    print(json.dumps({"nodes": [], "errors": ["Invalid node selection"]}))
+    sys.exit(2)
+TARGET_IDS = set() if MONITOR_ALL else {int(x) for x in NODE_ARGS}
+
+
+def filter_nodes(rows, target_ids, monitor_all):
+    """Return selected rows and requested IDs absent from the current panel."""
+    if monitor_all:
+        return rows, []
+    found = {r["id"] for r in rows}
+    selected = [r for r in rows if r["id"] in target_ids]
+    return selected, sorted(target_ids - found)
 
 async def poll_one(row):
     item = {"node_id": row["id"], "node_name": row["name"],
@@ -83,11 +101,9 @@ async def main():
     finally:
         await engine.dispose()
 
-    rows = [r for r in rows if not TARGET_IPS or r["address"] in TARGET_IPS]
-    if TARGET_IPS:
-        for ip in TARGET_IPS:
-            if not any(r["address"] == ip for r in rows):
-                output["errors"].append("Configured node not found: " + ip)
+    rows, missing_ids = filter_nodes(rows, TARGET_IDS, MONITOR_ALL)
+    for node_id in missing_ids:
+        output["errors"].append("Configured node ID not found: %s" % node_id)
     if not rows:
         output["errors"].append("No matching nodes")
     for row in rows:
