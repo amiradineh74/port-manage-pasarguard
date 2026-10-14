@@ -10,9 +10,9 @@ fi
 
 MODE="${1:-install}"
 case "$MODE" in
-  install|update|publish|uninstall) ;;
+  install|update|publish|uninstall|reinstall-keep-usage) ;;
   *)
-    echo 'Usage: bootstrap.sh [install|update|publish|uninstall]' >&2
+    echo 'Usage: bootstrap.sh [install|update|publish|uninstall|reinstall-keep-usage]' >&2
     exit 2
     ;;
 esac
@@ -58,6 +58,11 @@ elif [[ "$MODE" == update ]]; then
   [[ -f "$TMP_DIR/source/update.sh" ]] || { echo 'update.sh was not found.' >&2; exit 1; }
   bash -n "$TMP_DIR/source/update.sh"
   bash "$TMP_DIR/source/update.sh"
+elif [[ "$MODE" == reinstall-keep-usage ]]; then
+  echo '=== Reset monitor settings while retaining all recorded traffic volume ==='
+  [[ -f "$TMP_DIR/source/reinstall-keep-usage.sh" ]] || { echo 'reset script missing' >&2; exit 1; }
+  bash -n "$TMP_DIR/source/reinstall-keep-usage.sh"
+  bash "$TMP_DIR/source/reinstall-keep-usage.sh"
 elif [[ "$MODE" == uninstall ]]; then
   echo '=== Starting independent traffic monitor uninstaller ==='
   [[ -f "$TMP_DIR/source/uninstall.sh" ]] || { echo 'uninstall.sh was not found.' >&2; exit 1; }
