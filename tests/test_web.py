@@ -97,6 +97,11 @@ class WebTests(unittest.TestCase):
         old=json.loads(body)
         csrf=old['csrf']
 
+        with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+            historical_before=db.execute(
+                'SELECT COUNT(*),COALESCE(SUM(delta_down),0),COALESCE(SUM(cost),0) FROM samples'
+            ).fetchone()
+            historical_before=tuple(historical_before)
         data={'node_id':5,'visible_ports':[2053]}
         # CSRF is still mandatory for these new mutations.
         st,_,_=self.request('POST','/api/visible-ports',json.dumps(data),
@@ -114,6 +119,10 @@ class WebTests(unittest.TestCase):
                 'LEFT JOIN metadata m ON p.node_id=m.node_id AND p.port=m.port '
                 'WHERE p.node_id=5')}
             turkey=db.execute('SELECT COUNT(*) FROM metadata WHERE node_id=6').fetchone()[0]
+            historical_after=tuple(db.execute(
+                'SELECT COUNT(*),COALESCE(SUM(delta_down),0),COALESCE(SUM(cost),0) FROM samples'
+            ).fetchone())
+        self.assertEqual(historical_before,historical_after)
         self.assertEqual(selected[2053],1)
         self.assertEqual(selected[50315],0)
         self.assertEqual(turkey,0)  # Other node untouched.
