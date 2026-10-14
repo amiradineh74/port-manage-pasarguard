@@ -17,6 +17,7 @@ DEFAULT = {
  'monitor_all_nodes':False,
  'data_dir':os.environ.get('PGTM_DEFAULT_DIR','/opt/pg-traffic-monitor')+'/data',
  'poll_interval':60,
+ 'sparse_samples':True,
  'listen_host':'127.0.0.1',
  'listen_port':8791,
  'timezone':'Asia/Tehran',
@@ -126,6 +127,7 @@ def main():
     choose_nodes(cfg,nodes)
     cfg['data_dir']=ask('Independent database directory',cfg['data_dir'],lambda s:s.startswith('/'))
     cfg['poll_interval']=ask('Collection interval in seconds (minimum 60)',cfg['poll_interval'],lambda n:60<=n<=86400,int)
+    cfg['sparse_samples']=yesno('Skip idle zero-byte samples to save disk? (counter baselines kept)',cfg.get('sparse_samples',True))
     cfg['title']=ask('Dashboard title',cfg['title'])
     def timezone_ok(value):
         try:ZoneInfo(value);return True
