@@ -30,6 +30,32 @@ function render(){if(!state)return;
  document.querySelectorAll('.editbtn').forEach(btn=>btn.addEventListener('click',()=>openEdit(Number(btn.dataset.nid),Number(btn.dataset.port))));
  $('export').href='/api/export.csv?'+new URLSearchParams({from:$('from').value,to:$('to').value});
 }
+
+function renderManagement(){
+ if(!state)return;
+ const groups=new Map();
+ for(const p of state.ports){
+  if(!groups.has(p.node_id))groups.set(p.node_id,{name:p.node_name,ports:[]});
+  groups.get(p.node_id).ports.push(p);
+ }
+ $('node-manager').innerHTML=[...groups.entries()].map(([id,group])=>
+  '<article class="node-card"><h4>'+escapeHtml(group.name)+' (Node ID '+id+')</h4>'+
+  '<form class="node-form" data-node="'+id+'"><div class="port-checks">'+group.ports.map(p=>
+   '<label class="port-check"><input type="checkbox" value="'+p.port+'" '+(p.enabled?'checked':'')+
+   '> '+p.port+'</label>').join('')+'</div>'+
+  '<div class="buttons"><button type="button" class="minor bulk" data-action="all">انتخاب همه</button>'+
+  '<button type="button" class="minor bulk" data-action="none">لغو همه</button>'+
+  '<button class="primary" type="submit">ذخیره پورت‌های این نود</button></div></form></article>').join('');
+ document.querySelectorAll('.node-form').forEach(form=>{
+  form.addEventListener('submit',saveNodePorts);
+  form.querySelectorAll('.bulk').forEach(button=>button.addEventListener('click',()=>{
+   form.querySelectorAll('input[type=checkbox]').forEach(box=>{box.checked=button.dataset.action==='all';});
+  }));
+ });
+ $('display-title').value=state.title;
+ $('display-currency').value=state.currency;
+ $('display-timezone').value=state.timezone;
+}
 function openEdit(node,port){const p=state.ports.find(x=>x.node_id===node&&x.port===port);if(!p)return;
  $('editing').textContent=p.port+' / '+p.node_name; $('node_id').value=node; $('port').value=port;
  $('port_title').value=p.title; $('provider').value=p.provider; $('rate').value=p.price_per_gb;
