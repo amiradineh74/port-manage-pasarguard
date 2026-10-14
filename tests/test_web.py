@@ -61,6 +61,11 @@ class WebTests(unittest.TestCase):
         data=json.loads(b)
         self.assertEqual(data['ports'][0]['port'],2053)
         self.assertEqual(data['total']['down'],1000000000)
+        self.assertEqual(data['daily_by_provider'][0]['node_id'],5)
+        self.assertEqual(data['daily_by_provider'][0]['node_name'],'Germany')
+        st,headers,calendar=self.request('GET','/jalali.js',headers={'Cookie':cookie})
+        self.assertEqual(st,200)
+        self.assertIn(b'const Jalali=',calendar)
         self.assertEqual(data['total']['cost'],1000)
         update={'node_id':5,'port':2053,'title':'Paqet-Germany','provider':'Paqet',
                 'price_per_gb':850,'bill_direction':'downlink', 'enabled':True}
