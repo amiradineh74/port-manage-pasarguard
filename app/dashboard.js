@@ -105,6 +105,7 @@ function renderProviderPanels(){
  $('up').textContent=traffic(current.up);
  $('billed').textContent=traffic(current.billed);
  $('cost').textContent=money(current.cost);
+ renderExpenseCosts(current.cost);
  $('historical-cost').textContent='هزینه ثبت‌شده قبلی: '+money(current.historical_cost);
  const allLabel='همه ارائه‌دهنده‌ها';
  $('selected-provider-title').textContent='روند حجم مصرف — '+(selectedProvider==='__all__'?allLabel:selectedProvider);
@@ -143,6 +144,7 @@ function render(){if(!state)return;
  $('status').className='notice'+(lr&&JSON.parse(lr.errors_json).length?' warn':'');
  $('status').textContent=lr?'آخرین نمونه‌برداری: '+age(lr.collected_at)+' | تعداد نمونه: '+fmt(lr.sample_count)+(JSON.parse(lr.errors_json).length?' | هشدار: '+JSON.parse(lr.errors_json).join('، '):''):'هنوز نمونه‌ای ثبت نشده؛ یک بار دستور collect را اجرا کنید.';
  renderProviderPanels();
+ renderExpenses();
  const q=$('search').value.trim().toLowerCase();
  const ports=state.ports.filter(p=>(selectedProvider==='__all__'||(p.provider||'بدون ارائه‌دهنده')===selectedProvider)&&(selectedNode==='all'||p.node_id===Number(selectedNode))&&(p.enabled||$('show_hidden').checked)&&[p.node_name,p.port,p.title,p.provider,p.tag].join(' ').toLowerCase().includes(q));
  $('ports').innerHTML=ports.map(p=>`<tr class="${p.enabled?'':'muted'}"><td><strong>${escapeHtml(p.node_name)}</strong><span class="sub">پورت ${p.port} · نود ${p.node_id}</span></td><td>${escapeHtml(p.title||'بدون نام دلخواه')}<span class="sub">${escapeHtml(p.provider||'تعرفه تعیین نشده')} · <span class="tag">${escapeHtml(p.tag)}</span></span></td><td>${traffic(p.down)}</td><td>${traffic(p.up)}</td><td class="money">${money(p.cost)}<span class="sub">قبلی: ${money(p.historical_cost)}</span></td><td>${age(p.last_seen)}</td><td><button class="editbtn" data-nid="${p.node_id}" data-port="${p.port}">ویرایش</button></td></tr>`).join('')||'<tr><td colspan="7">پورتی پیدا نشد.</td></tr>';
@@ -246,6 +248,110 @@ async function saveDisplaySettings(e){
  }catch(err){alert(err.message);}
  finally{button.disabled=false;}
 }
+
+function expenseIsAssigned(expense){
+ if(selectedNode==='all'&&selectedProvider==='__all__')return true;
+ if(selectedNode!=='all'&&selectedProvider==='__all__')
+  return expense.scope==='node'&&expense.node_id===Number(selectedNode);
+ if(selectedNode==='all'&&selectedProvider!=='__all__')
+  return expense.scope==='provider'&&expense.provider===selectedProvider;
+ // Do not double-count an unallocated provider-wide bill as a node bill.
+ return false;
+}
+function expenseName(expense){
+ if(expense.scope==='general')return 'عمومی / پنل';
+ if(expense.scope==='provider')return 'ارائه‌دهنده: '+expense.provider;
+ const node=state.ports.find(p=>p.node_id===expense.node_id);
+ return 'نود: '+(node?.node_name||expense.node_id);
+}
+function renderExpenseCosts(trafficCost){
+ const listed=(state.fixed_expenses||[]).filter(expenseIsAssigned);
+ const rial=listed.reduce((sum,e)=>sum+Number(e.period_rial||0),0);
+ $('fixed-cost').textContent=money(rial/10);
+ $('all-cost').textContent=money(trafficCost+rial/10);
+ let context='تمام هزینه‌های ثبت‌شده';
+ if(selectedNode!=='all'&&selectedProvider!=='__all__')context='هزینه‌های مشترک در نمای هم‌زمان نود و ارائه‌دهنده تخصیص داده نمی‌شوند';
+ else if(selectedNode!=='all')context='فقط هزینه‌های اختصاصی این نود؛ عمومی و ارائه‌دهنده مشترک جدا باقی می‌مانند';
+ else if(selectedProvider!=='__all__')context='فقط هزینه‌های مستقیم همین ارائه‌دهنده؛ هزینه مشترک نود یا پنل سرشکن نمی‌شود';
+ $('expenses-scope-note').textContent='مبلغ ثابت در خلاصه بالا: '+money(rial/10)+' — '+context;
+}
+function renderExpenses(){
+ if(!state)return;
+ const items=state.fixed_expenses||[];
+ const table=$('expenses-table');
+ table.innerHTML=items.map(e=>{
+  const bounds=Jalali.label(e.start_date)+(e.end_date?' تا '+Jalali.label(e.end_date):' — بدون پایان');
+  return '<tr><td><strong>'+escapeHtml(e.label)+'</strong><span class="sub">'+escapeHtml(e.category)+
+   (e.note?' · '+escapeHtml(e.note):'')+'</span></td><td>'+escapeHtml(expenseName(e))+'</td>'+
+   '<td>'+(e.frequency==='monthly'?'ماهانه':'یکباره')+'</td>'+
+   '<td class="money">'+money(e.amount_rial/10)+'</td>'+
+   '<td class="money">'+money(e.period_rial/10)+'</td><td>'+escapeHtml(bounds)+'</td>'+
+   '<td><div class="cost-actions"><button type="button" class="edit-expense minor" data-id="'+e.id+
+   '">ویرایش</button><button type="button" class="delete-expense minor" data-id="'+e.id+
+   '">حذف</button></div></td></tr>';
+ }).join('')||'<tr><td colspan="7">هنوز هزینه‌ای ثبت نشده است.</td></tr>';
+ table.querySelectorAll('.edit-expense').forEach(button=>button.addEventListener('click',()=>
+  showExpense(Number(button.dataset.id))));
+ table.querySelectorAll('.delete-expense').forEach(button=>button.addEventListener('click',async()=>{
+  const id=Number(button.dataset.id),expense=items.find(x=>x.id===id);
+  if(!expense||!confirm('هزینه «'+expense.label+'» از محاسبات همه بازه‌ها حذف شود؟ این تغییر فقط در دیتابیس مانیتورینگ است.'))return;
+  try{await sendUpdate('/api/fixed-expense/delete',{id});await reload();}
+  catch(err){alert(err.message);}
+ }));
+ $('expense-provider-list').innerHTML=Object.keys(state.providers).filter(x=>x!=='بدون ارائه‌دهنده')
+   .map(x=>'<option value="'+escapeHtml(x)+'"></option>').join('');
+ $('expense-node').innerHTML=[...new Map(state.ports.map(p=>[p.node_id,p.node_name])).entries()]
+   .map(([id,name])=>'<option value="'+id+'">'+escapeHtml(name)+'</option>').join('');
+}
+function refreshExpenseForm(){
+ const scope=$('expense-scope').value;
+ $('expense-node-box').hidden=scope!=='node';
+ $('expense-provider-box').hidden=scope!=='provider';
+ const once=$('expense-frequency').value==='once';
+ $('expense-end-box').hidden=once;
+ $('expense-end-clear').hidden=once;
+ if(once)expenseEndPicker.clear();
+}
+function showExpense(id){
+ const e=(state.fixed_expenses||[]).find(x=>x.id===id);
+ $('expense-heading').textContent=e?'ویرایش هزینه':'ثبت هزینه جدید';
+ $('expense-id').value=e?.id||'';
+ $('expense-title').value=e?.label||'';
+ $('expense-category').value=e?.category||'other';
+ if($('expense-category').selectedIndex<0)$('expense-category').value='other';
+ $('expense-scope').value=e?.scope||'general';
+ $('expense-frequency').value=e?.frequency||'monthly';
+ $('expense-node').value=e?.node_id||'';
+ $('expense-provider').value=e?.provider||'';
+ $('expense-amount').value=e?(isRial()?e.amount_rial:e.amount_rial/10):'';
+ $('expense-unit').textContent=unit();
+ $('expense-amount').step=isRial()?'1':'0.1';
+ expenseStartPicker.set(e?.start_date||initialDay);
+ if(e?.end_date)expenseEndPicker.set(e.end_date);
+ else expenseEndPicker.clear();
+ $('expense-note').value=e?.note||'';
+ refreshExpenseForm();
+ $('expense-dialog').showModal();
+}
+async function saveExpense(event){
+ event.preventDefault();
+ const val=Number($('expense-amount').value);
+ if(!Number.isFinite(val)||val<0){alert('مبلغ نامعتبر است');return;}
+ const amountRial=Math.round(val*(isRial()?1:10));
+ const obj={
+  label:$('expense-title').value.trim(),category:$('expense-category').value,
+  scope:$('expense-scope').value,node_id:$('expense-scope').value==='node'?Number($('expense-node').value):null,
+  provider:$('expense-scope').value==='provider'?$('expense-provider').value.trim():'',
+  frequency:$('expense-frequency').value,amount_rial:amountRial,
+  start_date:$('expense-start').value,
+  end_date:$('expense-frequency').value==='monthly'?$('expense-end').value:'',
+  note:$('expense-note').value.trim()
+ };
+ if($('expense-id').value)obj.id=Number($('expense-id').value);
+ const btn=$('expense-form').querySelector('button[type=submit]');btn.disabled=true;
+ try{await sendUpdate('/api/fixed-expense',obj);$('expense-dialog').close();await reload();}
+ catch(err){alert(err.message);}finally{btn.disabled=false;}
+}
 function openEdit(node,port){const p=state.ports.find(x=>x.node_id===node&&x.port===port);if(!p)return;
  $('editing').textContent=p.port+' / '+p.node_name; $('node_id').value=node; $('port').value=port;
  $('port_title').value=p.title; $('provider').value=p.provider; $('rate').value=p.price_per_gb*multiplier();
@@ -288,6 +394,15 @@ applyTheme(initialTheme);
 $('theme-select').addEventListener('change',()=>applyTheme($('theme-select').value));
 const initialDay=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tehran'}).format(new Date());
 const sincePicker=Jalali.attach('since','since-date-label','since-calendar');
+const expenseStartPicker=Jalali.attach('expense-start','expense-start-label','expense-start-calendar');
+const expenseEndPicker=Jalali.attach('expense-end','expense-end-label','expense-end-calendar');
+$('new-expense').addEventListener('click',()=>showExpense(null));
+$('expense-scope').addEventListener('change',refreshExpenseForm);
+$('expense-frequency').addEventListener('change',refreshExpenseForm);
+$('expense-end-clear').addEventListener('click',()=>expenseEndPicker.clear());
+$('expense-form').addEventListener('submit',saveExpense);
+$('expense-cancel').addEventListener('click',()=>$('expense-dialog').close());
+
 $('since-clear').addEventListener('click',()=>{sincePicker.clear();$('since-time').value='00:00';});
 const rangeTo=Jalali.attach('to','to-label','to-calendar',reload);
 const rangeFrom=Jalali.attach('from','from-label','from-calendar',reload);
