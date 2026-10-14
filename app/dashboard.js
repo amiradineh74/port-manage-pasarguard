@@ -7,13 +7,18 @@ const traffic=n=>(n/1e9>=1?fmt(n/1e9)+' GB':fmt(n/1e6)+' MB');
 const isRial=()=>['ریال','Rial','IRR'].includes(state?.currency);
 const unit=()=>isRial()?'ریال':'تومان';
 const multiplier=()=>isRial()?10:1;
-const money=n=>fmt((n||0)*multiplier())+' '+unit();
+const rialFormatter=new Intl.NumberFormat('fa-IR',{maximumFractionDigits:0,minimumFractionDigits:0});
+const money=n=>(isRial()?rialFormatter.format(Math.round((Number(n)||0)*10)):fmt(n))+' '+unit();
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function age(s){if(!s)return '—'; const dt=new Date(s);return dt.toLocaleString('fa-IR',{timeZone:state.timezone,dateStyle:'short',timeStyle:'short'});}
 
 
 let selectedNode='all';
-const chartColors=['#578bce','#22c55e','#eaad52','#a78bfa','#29bdbd','#e58f9d','#d4dc6a'];
+// 20 distinct node colors shared by charts and legend.
+const chartColors=['#578bce','#22c55e','#eaad52','#a78bfa','#29bdbd',
+ '#e58f9d','#b7dc50','#f97316','#16a6c9','#e15bc0',
+ '#9ca3af','#a7b82a','#d2695e','#8b5cf6','#32a488',
+ '#f43f5e','#3b82f6','#b3a2eb','#bd8e28','#35b6e5'];
 function visiblePaths(){
  return state.ports.filter(p=>p.enabled &&
   (selectedProvider==='__all__'||(p.provider||'بدون ارائه‌دهنده')===selectedProvider) &&
@@ -30,8 +35,11 @@ function timeseries(period){
  for(const row of rows){
   if(selectedProvider!=='__all__'&&row.provider!==selectedProvider)continue;
   if(selectedNode!=='all'&&row.node_id!==Number(selectedNode))continue;
-  let group=buckets.get(row.period);
-  if(!group){group=new Map();buckets.set(row.period,group);}
+  const bucket=period==='monthly'
+   ? (()=>{const [year,month]=Jalali.fromISO(row.period.slice(0,10));return 'J'+year+'/'+String(month).padStart(2,'0');})()
+   : row.period;
+  let group=buckets.get(bucket);
+  if(!group){group=new Map();buckets.set(bucket,group);}
   let item=group.get(row.node_id);
   if(!item){item={node_id:row.node_id,node_name:row.node_name,down:0,up:0,cost:0,historical_cost:0};group.set(row.node_id,item);}
   for(const k of ['down','up','cost','historical_cost'])item[k]+=Number(row[k]||0);
@@ -39,7 +47,9 @@ function timeseries(period){
  return [...buckets.entries()].sort((a,b)=>a[0].localeCompare(b[0]))
   .map(([period,nodes])=>({period,nodes}));
 }
+const persianDigits=s=>String(s).replace(/[0-9]/g,d=>'۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
 const periodLabel=period=>{
+ if(period.startsWith('J'))return persianDigits(period.slice(1));
  const date=Jalali.label(period.slice(0,10));
  return period.length>10?date.slice(5)+' '+period.slice(11,13)+':00':date.slice(5);
 };
@@ -51,7 +61,7 @@ function stackedBars(id,groups,field){
  const selectedIds=[...new Set(groups.flatMap(g=>[...g.nodes.keys()]))].sort((a,b)=>a-b);
  const colors=new Map([...allNodes.keys()].sort((a,b)=>a-b).map((id,i)=>[id,chartColors[i%chartColors.length]]));
  const left=90,right=24,top=20,bottom=55,h=305;
- const w=Math.min(5500,Math.max(940,groups.length*38+left+right));
+ const w=Math.min(5500,Math.max(760,groups.length*38+left+right));
  const barArea=w-left-right;
  const barWidth=Math.max(3,Math.min(65,barArea/groups.length*.68));
  const amounts=groups.map(g=>[...g.nodes.values()].reduce((acc,node)=>acc+(field==='traffic'?(node.down+node.up)/1e9:node.cost*multiplier()),0));
@@ -60,9 +70,9 @@ function stackedBars(id,groups,field){
  let svg='<svg class="stacked-chart" role="img" aria-label="'+(field==='traffic'?'نمودار ستونی حجم تفکیک نود':'نمودار ستونی هزینه تفکیک نود')+'" viewBox="0 0 '+w+' '+h+'" style="min-width:'+w+'px">';
  for(let k=0;k<=4;k++){
   const v=max*k/4,Y=y(v);
-  svg+='<line x1="'+left+'" y1="'+Y+'" x2="'+(w-right)+'" y2="'+Y+'" stroke="#294059"/>';
-  svg+='<text x="'+(left-8)+'" y="'+(Y+4)+'" text-anchor="end" fill="#a6b9d1" font-size="12">'+
-    escapeHtml(fmt(v)+(field==='traffic'?' GB':' '+unit()))+'</text>';
+  svg+='<line x1="'+left+'" y1="'+Y+'" x2="'+(w-right)+'" y2="'+Y+'" stroke="var(--chart-grid,#294059)"/>';
+  svg+='<text x="'+(left-8)+'" y="'+(Y+4)+'" text-anchor="end" fill="var(--chart-label,#a6b9d1)" font-size="12">'+
+    escapeHtml((field==='traffic'?fmt(v):isRial()?rialFormatter.format(Math.round(v)):fmt(v))+(field==='traffic'?' GB':' '+unit()))+'</text>';
  }
  const step=Math.max(1,Math.ceil(groups.length/10));
  for(let i=0;i<groups.length;i++){
@@ -120,11 +130,12 @@ function renderProviderPanels(){
  }));
  const scale=$('chart-scale').value;
  const hourly=state.hourly_available && (scale==='hourly'||(scale==='auto'&&$('from').value===$('to').value));
- stackedBars('chart',timeseries(hourly?'hourly':'daily'),'traffic');
- $('traffic-chart-caption').textContent=(hourly?'تجمیع ساعتی':'تجمیع روزانه')+
+ const grouping=scale==='monthly'?'monthly':(hourly?'hourly':'daily');
+ stackedBars('chart',timeseries(grouping),'traffic');
+ $('traffic-chart-caption').textContent=(grouping==='monthly'?'تجمیع ماهانه شمسی':hourly?'تجمیع ساعتی':'تجمیع روزانه')+
    ' بر اساس UTC؛ برچسب تاریخ‌ها شمسی است'+
    (scale==='hourly'&&!state.hourly_available?' (برای بازه بیش از ۳۱ روز، تجمیع روزانه انجام شد)':'');
- stackedBars('cost-chart',timeseries('daily'),'cost');
+ stackedBars('cost-chart',timeseries(grouping),'cost');
 }
 function render(){if(!state)return;
  $('title').textContent=state.title;
