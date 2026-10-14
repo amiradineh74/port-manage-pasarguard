@@ -12,6 +12,8 @@ class SafetyInvariants(unittest.TestCase):
         self.assertNotIn('await node.start(',content)
     def test_no_real_server_ips_in_repo_defaults(self):
         content=(ROOT/'app'/'setup.py').read_text()
-        self.assertIn("'node_ips':[]",content)
+        self.assertIn("'node_ids':[]",content)
+        self.assertIn("'monitor_all_nodes':False",content)
+        self.assertNotIn("'node_ips':[]",content)
 
 if __name__=='__main__':unittest.main()
