@@ -15,8 +15,17 @@ from storage import connect, insert_poll
 def load_config(path):
     with open(path, encoding='utf-8') as f:
         cfg = json.load(f)
-    if not isinstance(cfg.get('node_ips'), list):
-        raise ValueError('node_ips must be an array')
+    # Strict selection avoids silently monitoring every node if a config is incomplete.
+    monitor_all = cfg.get('monitor_all_nodes', False)
+    node_ids = cfg.get('node_ids')
+    if type(monitor_all) is not bool or type(node_ids) is not list:
+        raise ValueError('Please reconfigure node selection: monitor_all_nodes / node_ids')
+    if any(type(n) is not int or n < 1 for n in node_ids):
+        raise ValueError('node_ids must contain positive integers')
+    if monitor_all and node_ids:
+        raise ValueError('Choose either all nodes or specific node IDs, not both')
+    if not monitor_all and not node_ids:
+        raise ValueError('No nodes selected. Re-run interactive setup.')
     return cfg
 
 
@@ -33,12 +42,15 @@ def collect(config_file):
             print('Collector already running; skipping', file=sys.stderr)
             return 0
         bridge_code = (Path(__file__).resolve().parent / 'bridge.py').read_text(encoding='utf-8')
+        selection = ['--all'] if cfg['monitor_all_nodes'] else [
+            str(node_id) for node_id in cfg['node_ids']
+        ]
         command = [
             'docker', 'exec', '-i', cfg['panel_container'],
-            cfg['panel_python'], '-', *cfg['node_ips'],
+            cfg['panel_python'], '-', *selection,
         ]
         p = subprocess.run(command, input=bridge_code, capture_output=True, text=True,
-                           timeout=max(30, 18 * max(len(cfg['node_ips']), 2)), check=False)
+                           timeout=max(30, 18 * max(len(cfg['node_ids']), 2)), check=False)
         if p.returncode:
             # Never print stderr, as upstream errors might contain DB credentials.
             raise RuntimeError('Panel bridge failed, return code: %s' % p.returncode)
