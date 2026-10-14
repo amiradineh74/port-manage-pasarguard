@@ -89,7 +89,7 @@ def dashboard(params):
          (CFG.get('default_price_per_gb',0),CFG.get('default_bill_direction','downlink'))).fetchall()
         groups=db.execute('''SELECT s.node_id,s.port,
          SUM(s.delta_down) down, SUM(s.delta_up) up,
-         SUM(s.bill_bytes) billed, SUM(s.cost) cost, COUNT(*) samples,
+         SUM(s.bill_bytes) historical_billed, SUM(s.cost) historical_cost, COUNT(*) samples,
          SUM(CASE WHEN s.event!='ok' THEN 1 ELSE 0 END) events
          FROM samples s LEFT JOIN metadata m ON m.node_id=s.node_id AND m.port=s.port
          WHERE s.collected_at>=? AND s.collected_at<?
@@ -100,24 +100,46 @@ def dashboard(params):
         combined=[]
         for row in ports:
             p=dict(row)
-            p.update(lookup.get((p['node_id'],p['port']),{'down':0,'up':0,'billed':0,'cost':0,'samples':0,'events':0}))
+            p.update(lookup.get((p['node_id'],p['port']),
+                {'down':0,'up':0,'historical_billed':0,'historical_cost':0,'samples':0,'events':0}))
+            # Current-rate estimate recalculates all recorded traffic within the
+            # reporting window with the *current* direction and rate. Historical
+            # accounting stays untouched, including incorrectly entered old rates.
+            p['billed']={'downlink':p['down'],'uplink':p['up'],
+                         'both':p['down']+p['up']}[p['bill_direction']]
+            p['cost']=p['billed']*p['price_per_gb']/1_000_000_000
             combined.append(p)
         # Daily totals, aggregated at SQLite layer (UTC bucket; browser converts labels).
         times=db.execute('''SELECT substr(s.collected_at,1,10) day,
-         SUM(s.delta_down) down,SUM(s.delta_up) up,SUM(s.bill_bytes) billed,SUM(s.cost) cost
+         SUM(s.delta_down) down,SUM(s.delta_up) up,
+         SUM(CASE COALESCE(m.bill_direction,?)
+             WHEN 'downlink' THEN s.delta_down
+             WHEN 'uplink' THEN s.delta_up
+             ELSE s.delta_up + s.delta_down END) billed,
+         SUM((CASE COALESCE(m.bill_direction,?)
+             WHEN 'downlink' THEN s.delta_down
+             WHEN 'uplink' THEN s.delta_up
+             ELSE s.delta_up + s.delta_down END)
+             * COALESCE(m.price_per_gb,?) / 1000000000.0) cost,
+         SUM(s.cost) historical_cost
          FROM samples s LEFT JOIN metadata m ON m.node_id=s.node_id AND m.port=s.port
          WHERE s.collected_at>=? AND s.collected_at<?
            AND COALESCE(m.enabled,1)=1
            AND (m.billing_since IS NULL OR m.billing_since='' OR s.collected_at>=m.billing_since)
-         GROUP BY substr(s.collected_at,1,10) ORDER BY day''',(begin,end)).fetchall()
+         GROUP BY substr(s.collected_at,1,10) ORDER BY day''',
+         (CFG.get('default_bill_direction','downlink'),
+          CFG.get('default_bill_direction','downlink'),
+          CFG.get('default_price_per_gb',0),begin,end)).fetchall()
         last=db.execute('SELECT collected_at,node_count,sample_count,errors_json FROM poll_runs ORDER BY id DESC LIMIT 1').fetchone()
         providers={}
         for p in combined:
             if not p['enabled']: continue
             name=p['provider'] or 'بدون ارائه‌دهنده'
-            v=providers.setdefault(name,{'billed':0,'cost':0,'down':0,'up':0})
+            v=providers.setdefault(name,{'billed':0,'cost':0,'down':0,'up':0,
+                                         'historical_cost':0})
             for col in v:v[col]+=p[col]
-        total={x:sum(p[x] for p in combined if p['enabled']) for x in ('down','up','billed','cost')}
+        total={x:sum(p[x] for p in combined if p['enabled'])
+               for x in ('down','up','billed','cost','historical_cost')}
         return {'ports':combined,'daily':[dict(t) for t in times], 'providers':providers,
                 'total':total,'period':{'from':lo,'to':hi},
                 'last_run':dict(last) if last else None,
