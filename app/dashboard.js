@@ -104,6 +104,25 @@ function render(){if(!state)return;
  $('export').href='/api/export.csv?'+new URLSearchParams({from:$('from').value,to:$('to').value});
 }
 
+
+function checkedPorts(form){
+ return [...form.querySelectorAll('input.port-box:checked')].map(x=>Number(x.value)).sort((a,b)=>a-b);
+}
+function syncManualInput(form){
+ form.querySelector('.port-manual').value=checkedPorts(form).join(',');
+}
+function parseManualPorts(form){
+ const raw=form.querySelector('.port-manual').value.trim();
+ if(!raw)return [];
+ const parts=raw.split(/[,،\s]+/).filter(Boolean);
+ const available=new Set([...form.querySelectorAll('input.port-box')].map(x=>Number(x.value)));
+ const picked=parts.map(v=>Number(v));
+ if(picked.some(n=>!Number.isInteger(n)||n<1||n>65535||!available.has(n))||
+    new Set(picked).size!==picked.length){
+  throw Error('فقط شماره پورت‌های فهرست‌شده را بدون تکرار و با ویرگول وارد کنید.');
+ }
+ return picked.sort((a,b)=>a-b);
+}
 function renderManagement(){
  if(!state)return;
  const groups=new Map();
@@ -113,23 +132,39 @@ function renderManagement(){
  }
  $('node-manager').innerHTML=[...groups.entries()].map(([id,group])=>
   '<article class="node-card"><h4>'+escapeHtml(group.name)+' (Node ID '+id+')</h4>'+
+  '<p class="sub">پورت‌ها از Core این نود کشف شده‌اند، نه الزاماً پورت‌های اختصاصی آن. مصرف ثبت‌شده فقط برای پیشنهاد استفاده می‌شود.</p>'+
   '<form class="node-form" data-node="'+id+'"><div class="port-checks">'+group.ports.map(p=>
-   '<label class="port-check"><input type="checkbox" value="'+p.port+'" '+(p.enabled?'checked':'')+
-   '> '+p.port+'</label>').join('')+'</div>'+
-  '<div class="buttons"><button type="button" class="minor bulk" data-action="all">انتخاب همه</button>'+
+   '<label class="port-check" title="'+(p.total_down+p.total_up>0?'مصرف مشاهده‌شده':'بدون مصرف ثبت‌شده')+
+   '"><input class="port-box" type="checkbox" value="'+p.port+'" '+(p.enabled?'checked':'')+
+   '> '+p.port+(p.total_down+p.total_up>0?' ●':'')+'</label>').join('')+'</div>'+
+  '<label class="manual-ports-label">یا پورت‌های این نود را با ویرگول وارد کنید'+
+  '<input class="port-manual" inputmode="text" autocomplete="off" dir="ltr" placeholder="80,2053,47307" value="'+
+  group.ports.filter(p=>p.enabled).map(p=>p.port).join(',')+'"></label>'+
+  '<p class="sub">علامت ● یعنی این پورت از زمان شروع مانیتورینگ مصرف داشته است. مصرف صفر، دلیل غیرفعال‌بودن پورت نیست.</p>'+
+  '<div class="buttons"><button type="button" class="minor bulk" data-action="observed">پیشنهاد پورت‌های مصرف‌دار</button>'+
+  '<button type="button" class="minor bulk" data-action="all">انتخاب همه</button>'+
   '<button type="button" class="minor bulk" data-action="none">لغو همه</button>'+
   '<button class="primary" type="submit">ذخیره پورت‌های این نود</button></div></form></article>').join('');
  document.querySelectorAll('.node-form').forEach(form=>{
   form.addEventListener('submit',saveNodePorts);
+  form.querySelectorAll('input.port-box').forEach(box=>box.addEventListener('change',()=>syncManualInput(form)));
   form.querySelectorAll('.bulk').forEach(button=>button.addEventListener('click',()=>{
-   form.querySelectorAll('input[type=checkbox]').forEach(box=>{box.checked=button.dataset.action==='all';});
+   const group=groups.get(Number(form.dataset.node));
+   const observed=new Set(group.ports.filter(p=>p.total_down+p.total_up>0).map(p=>p.port));
+   form.querySelectorAll('input.port-box').forEach(box=>{
+    const action=button.dataset.action;
+    box.checked=action==='all'||(action==='observed'&&observed.has(Number(box.value)));
+   });
+   syncManualInput(form);
+   if(button.dataset.action==='observed'){
+    alert('این فقط یک پیشنهاد است. پورت‌های بدون مصرف ممکن است فعال باشند. فهرست را بررسی و سپس ذخیره کنید.');
+   }
   }));
  });
  $('display-title').value=state.title;
  $('display-currency').value=state.currency;
  $('display-timezone').value=state.timezone;
 }
-
 async function sendUpdate(url,payload){
  if(!state)throw Error('آمار داشبورد هنوز آماده نیست.');
  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':state.csrf},body:JSON.stringify(payload)});
@@ -141,7 +176,8 @@ async function sendUpdate(url,payload){
 async function saveNodePorts(e){
  e.preventDefault();
  const form=e.currentTarget,nodeId=Number(form.dataset.node);
- const ports=[...form.querySelectorAll('input[type=checkbox]:checked')].map(x=>Number(x.value));
+ let ports;
+ try{ports=parseManualPorts(form);}catch(err){alert(err.message);return;}
  const button=form.querySelector('button[type=submit]');
  button.disabled=true;
  try{
