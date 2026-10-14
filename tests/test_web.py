@@ -149,6 +149,50 @@ class WebTests(unittest.TestCase):
         self.assertEqual(st,400)
 
 
+    def test_fixed_expense_http_management_keeps_traffic_history(self):
+        cookie=self.login()
+        st,_,payload=self.request('GET',
+            '/api/dashboard?from=2026-10-13&to=2026-10-13',headers={'Cookie':cookie})
+        self.assertEqual(st,200)
+        csrf=json.loads(payload)['csrf']
+        auth={'Cookie':cookie,'Content-Type':'application/json','X-CSRF-Token':csrf}
+        item={'label':'DE server','category':'server','scope':'node','node_id':5,
+              'provider':'','frequency':'monthly','amount_rial':310000,
+              'start_date':'2026-10-01','end_date':'','note':'monthly cost'}
+        with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+            snapshot=tuple(db.execute('SELECT COUNT(*),SUM(delta_down) FROM samples').fetchone())
+        st,_,_=self.request('POST','/api/fixed-expense',json.dumps(item),
+            {'Cookie':cookie,'Content-Type':'application/json'})
+        self.assertEqual(st,403)
+        invalid=dict(item,node_id=901)
+        st,_,_=self.request('POST','/api/fixed-expense',json.dumps(invalid),auth)
+        self.assertEqual(st,400)
+        st,_,raw=self.request('POST','/api/fixed-expense',json.dumps(item),auth)
+        self.assertEqual(st,200)
+        expense_id=json.loads(raw)['id']
+        st,_,raw=self.request('GET','/api/dashboard?from=2026-10-13&to=2026-10-13',
+                              headers={'Cookie':cookie})
+        data=json.loads(raw)
+        self.assertEqual(st,200)
+        self.assertEqual(data['fixed_expenses_total_rial'],10000)
+        self.assertEqual(data['fixed_expenses'][0]['id'],expense_id)
+        self.assertEqual(data['fixed_expenses'][0]['scope'],'node')
+        item.update({'id':expense_id,'amount_rial':620000})
+        st,_,_=self.request('POST','/api/fixed-expense',json.dumps(item),auth)
+        self.assertEqual(st,200)
+        st,_,raw=self.request('GET','/api/dashboard?from=2026-10-13&to=2026-10-13',
+                              headers={'Cookie':cookie})
+        self.assertEqual(json.loads(raw)['fixed_expenses_total_rial'],20000)
+        st,_,_=self.request('POST','/api/fixed-expense/delete',
+            json.dumps({'id':expense_id}),auth)
+        self.assertEqual(st,200)
+        st,_,raw=self.request('GET','/api/dashboard?from=2026-10-13&to=2026-10-13',
+                              headers={'Cookie':cookie})
+        self.assertEqual(json.loads(raw)['fixed_expenses_total_rial'],0)
+        with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+            self.assertEqual(snapshot,tuple(db.execute(
+                'SELECT COUNT(*),SUM(delta_down) FROM samples').fetchone()))
+
     def test_z_rial_display_provider_trends_and_csv(self):
         cookie=self.login()
         hdr={'Cookie':cookie,'Content-Type':'application/json'}
