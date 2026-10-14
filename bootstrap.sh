@@ -26,7 +26,7 @@ done
 
 REPO='amiradineh74/port-manage-pasarguard'
 BRANCH='main'
-ARCHIVE_URL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
+ARCHIVE_URL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz?cache_bust=$(date +%s)"
 TMP_DIR="$(mktemp -d -t pgtraffic-bootstrap.XXXXXXXX)"
 trap 'rm -rf -- "$TMP_DIR"' EXIT
 mkdir -p "$TMP_DIR/source"
