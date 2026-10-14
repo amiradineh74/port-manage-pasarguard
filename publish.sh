@@ -9,9 +9,9 @@ for cmd in python3 ss getent systemctl install; do
   command -v "$cmd" >/dev/null 2>&1 || fail "Missing required command: $cmd"
 done
 
-DEFAULT_DIR="\${PGTM_DEFAULT_DIR:-/opt/pg-traffic-monitor}"
+DEFAULT_DIR="${PGTM_DEFAULT_DIR:-/opt/pg-traffic-monitor}"
 read -r -p "Existing installation directory [$DEFAULT_DIR]: " DIR
-DIR="\${DIR:-$DEFAULT_DIR}"
+DIR="${DIR:-$DEFAULT_DIR}"
 [[ "$DIR" =~ ^/[a-zA-Z0-9_./-]+$ && "$DIR" != '/' ]] || fail 'Invalid installation directory.'
 [[ -f "$DIR/config.json" && -f "$DIR/app/web.py" ]] || fail 'Monitoring installation not found.'
 
@@ -28,7 +28,7 @@ if [[ -e /etc/systemd/system/pgtraffic-public.service ]]; then
 fi
 
 read -r -p 'Public subdomain (existing A record pointing to this server): ' DOMAIN
-DOMAIN="\${DOMAIN,,}"
+DOMAIN="${DOMAIN,,}"
 python3 - "$DOMAIN" <<'PY' || fail 'Invalid public subdomain.'
 import re,sys
 value=sys.argv[1]
@@ -39,7 +39,7 @@ assert not value.endswith(('.local','.localhost','.internal','.test','.invalid',
 PY
 
 read -r -p 'Public HTTPS port [443]: ' PUBLIC_PORT
-PUBLIC_PORT="\${PUBLIC_PORT:-443}"
+PUBLIC_PORT="${PUBLIC_PORT:-443}"
 [[ "$PUBLIC_PORT" =~ ^[0-9]{1,5}$ ]] || fail 'Public HTTPS port must be numeric.'
 (( PUBLIC_PORT == 443 || (PUBLIC_PORT >= 1024 && PUBLIC_PORT <= 65535) )) || fail 'Use 443 or a port between 1024 and 65535.'
 (( PUBLIC_PORT != BACKEND_PORT )) || fail 'Public port must differ from the local dashboard port.'
