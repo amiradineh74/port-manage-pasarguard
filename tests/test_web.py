@@ -134,4 +134,43 @@ class WebTests(unittest.TestCase):
                             json.dumps({'title':'Bad','currency':'Toman','timezone':'Invalid/Zone'}),hdr)
         self.assertEqual(st,400)
 
+
+    def test_z_rial_display_provider_trends_and_csv(self):
+        cookie=self.login()
+        hdr={'Cookie':cookie,'Content-Type':'application/json'}
+        st,_,raw=self.request('GET','/api/dashboard?from=2026-10-13&to=2026-10-13',
+                              headers={'Cookie':cookie})
+        self.assertEqual(st,200)
+        csrf=json.loads(raw)['csrf']
+        hdr['X-CSRF-Token']=csrf
+        st,_,_=self.request('POST','/api/display-settings',
+                            json.dumps({'title':'Rial Report','currency':'ریال','timezone':'UTC'}),
+                            hdr)
+        self.assertEqual(st,200)
+        st,_,raw=self.request('GET','/api/dashboard?from=2026-10-13&to=2026-10-13',
+                              headers={'Cookie':cookie})
+        self.assertEqual(st,200)
+        info=json.loads(raw)
+        self.assertEqual(info['currency'],'ریال')
+        # API money stays in historical internal Toman units; the client converts to Rial.
+        self.assertEqual(info['total']['cost'],850)
+        self.assertEqual(info['total']['historical_cost'],1000)
+        self.assertIn('Paqet',info['providers'])
+        self.assertEqual(info['providers']['Paqet']['cost'],850)
+        daily=info['daily_by_provider']
+        hourly=info['hourly_by_provider']
+        self.assertTrue(info['hourly_available'])
+        self.assertTrue(daily)
+        self.assertTrue(hourly)
+        self.assertAlmostEqual(sum(x['cost'] for x in daily),info['total']['cost'])
+        self.assertAlmostEqual(sum(x['cost'] for x in hourly),info['total']['cost'])
+        self.assertAlmostEqual(sum(x['cost'] for x in daily if x['provider']=='Paqet'),850)
+        st,_,raw=self.request('GET','/api/export.csv?from=2026-10-13&to=2026-10-13',
+                              headers={'Cookie':cookie})
+        self.assertEqual(st,200)
+        exported=raw.decode('utf-8-sig')
+        self.assertIn('Recorded Rate Rial/GB',exported)
+        self.assertIn('Recorded Cost Rial',exported)
+        self.assertIn('10000.0',exported)
+
 if __name__=='__main__':unittest.main()
