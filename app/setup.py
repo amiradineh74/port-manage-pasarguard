@@ -23,7 +23,7 @@ DEFAULT = {
  'title':'Port Traffic & Cost Monitor',
  'default_bill_direction':'downlink',
  'default_price_per_gb':0,
- 'currency':'Toman',
+ 'currency':'Rial',
  'exclude_ports':[22022],
  'ssl_cert':'', 'ssl_key':'',
 }
@@ -133,9 +133,16 @@ def main():
     cfg['timezone']=ask('Reporting timezone',cfg['timezone'],timezone_ok)
     cfg['listen_host']=ask('Web listen address (127.0.0.1 recommended)',cfg['listen_host'])
     cfg['listen_port']=ask('Dashboard port',cfg['listen_port'],lambda n:1024<=n<=65535,int)
-    cfg['currency']=ask('Currency label',cfg['currency'])
+    cfg['currency']=ask('Display currency: Rial or Toman',cfg['currency'],
+         lambda name:name in ('Rial','Toman','ریال','تومان'))
     cfg['default_bill_direction']=ask('Default billed direction: downlink/uplink/both',cfg['default_bill_direction'],lambda s:s in ('downlink','uplink','both'))
-    cfg['default_price_per_gb']=ask('Default rate per GB (0 = configure later per port)',cfg['default_price_per_gb'],lambda n:0<=n<1e12,float)
+    # Keep all stored rates in Toman for backwards-compatible SQLite snapshots;
+    # the installer accepts Rial when the selected display currency is Rial.
+    use_rial=cfg['currency'] in ('Rial','ریال')
+    shown_rate=cfg['default_price_per_gb'] * (10 if use_rial else 1)
+    entered_rate=ask('Default rate per GB in '+('Rial' if use_rial else 'Toman')+
+        ' (0 = configure later per port)',shown_rate,lambda n:0<=n<1e13,float)
+    cfg['default_price_per_gb']=entered_rate/(10 if use_rial else 1)
     ports=ask('Excluded ports (comma-separated)',' ,'.join(map(str,cfg['exclude_ports'])))
     cfg['exclude_ports']=[int(x.strip()) for x in ports.split(',') if x.strip()]
     if cfg['listen_host'] not in ('127.0.0.1','::1','localhost'):
