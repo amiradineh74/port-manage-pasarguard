@@ -58,6 +58,16 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  assert.ok(elem('node-legend').innerHTML.includes('Turkey'));
  assert.ok(elem('node-legend').innerHTML.includes('Germany'));
  assert.ok(elem('cost-chart').innerHTML.includes('نمودار ستونی'));
+ vm.runInContext("state.fixed_expenses=[{id:1,scope:'general',period_rial:1000},{id:2,scope:'node',node_id:3,period_rial:4000},{id:3,scope:'provider',provider:'A',period_rial:6000}];renderProviderPanels()",ctx);
+ assert.equal(elem('fixed-cost').textContent,vm.runInContext('money(1100)',ctx));
+ assert.equal(elem('all-cost').textContent,vm.runInContext('money(1560.734)',ctx));
+ vm.runInContext("selectedNode='3';selectedProvider='__all__';renderProviderPanels()",ctx);
+ assert.equal(elem('fixed-cost').textContent,vm.runInContext('money(400)',ctx));
+ vm.runInContext("selectedNode='all';selectedProvider='A';renderProviderPanels()",ctx);
+ assert.equal(elem('fixed-cost').textContent,vm.runInContext('money(600)',ctx));
+ vm.runInContext("selectedNode='3';selectedProvider='A';renderProviderPanels()",ctx);
+ assert.equal(elem('fixed-cost').textContent,vm.runInContext('money(0)',ctx));
+ vm.runInContext("selectedNode='all';selectedProvider='__all__';renderProviderPanels()",ctx);
  for(const theme of ['night','graphite','arctic','forest','sunset']){
   vm.runInContext("applyTheme('"+theme+"')",ctx);
   assert.equal(ctx.document.body.dataset.theme,theme);
