@@ -420,11 +420,11 @@ class Handler(BaseHTTPRequestHandler):
                     e['frequency'],e['amount_rial'],e['start_date'],e['end_date'],
                     round(e['period_rial']),e['note']]
             for i in (0,1,2,4,5,10):
-                if isinstance(fields[i],str) and fields[i].startswith(('=','+','-','@','\\t','\\r')):
+                if isinstance(fields[i],str) and fields[i].startswith(('=','+','-','@','\t','\r')):
                     fields[i]="'"+fields[i]
             writer.writerow(fields)
         writer.writerow(['جمع هزینه ثابت در بازه','','','','','','','','',round(fixed_total(expenses)),''])
-        return self.send_bytes(('\\ufeff'+out.getvalue()).encode('utf-8'),
+        return self.send_bytes(('\ufeff'+out.getvalue()).encode('utf-8'),
                                ctype='text/csv; charset=utf-8',
                                extra={'Content-Disposition':'attachment; filename="pgtraffic-fixed-expenses.csv"'})
 
