@@ -40,3 +40,5 @@ function attach(field,displayId,popoverId,onChange){
 }
 return {attach,label,fromISO,toISO};
 })();
+
+if(typeof module==='object'&&module.exports)module.exports=Jalali;
