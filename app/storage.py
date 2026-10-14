@@ -89,8 +89,12 @@ def insert_poll(db, payload, timestamp, settings):
                     continue
                 previous = db.execute('SELECT * FROM port_state WHERE node_id=? AND port=?', (nid, port)).fetchone()
                 changed = previous is not None and previous['tag'] != tag
-                raw_up, du, eu = delta(previous['raw_up'] if previous else None, p.get('uplink'), changed)
-                raw_dn, dd, ed = delta(previous['raw_down'] if previous else None, p.get('downlink'), changed)
+                address_changed = previous is not None and previous['node_address'] != node['address']
+                # New IP may mean a new Xray instance. Start a safe new baseline instead
+                # of accidentally counting bytes from an unrelated counter lifetime.
+                new_baseline = changed or address_changed
+                raw_up, du, eu = delta(previous['raw_up'] if previous else None, p.get('uplink'), new_baseline)
+                raw_dn, dd, ed = delta(previous['raw_down'] if previous else None, p.get('downlink'), new_baseline)
                 meta = db.execute('SELECT * FROM metadata WHERE node_id=? AND port=?', (nid, port)).fetchone()
                 direction = meta['bill_direction'] if meta else settings.get('default_bill_direction','downlink')
                 rate = float(meta['price_per_gb']) if meta else float(settings.get('default_price_per_gb',0))
@@ -98,6 +102,7 @@ def insert_poll(db, payload, timestamp, settings):
                 cost = bill * rate / 1_000_000_000
                 events = []
                 if changed: events.append('tag_changed')
+                if address_changed: events.append('address_changed')
                 if 'baseline' in (eu,ed): events.append('baseline')
                 if 'reset' in (eu,ed): events.append('counter_reset')
                 if 'missing' in (eu,ed): events.append('partial')
