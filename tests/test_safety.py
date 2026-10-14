@@ -10,6 +10,15 @@ class SafetyInvariants(unittest.TestCase):
         self.assertNotIn('reset=True',content)
         self.assertNotIn('await node.stop(',content)
         self.assertNotIn('await node.start(',content)
+    def test_public_publish_only_changes_monitor(self):
+        script=(ROOT/'publish.sh').read_text()
+        self.assertIn('pgtraffic-web.service',script)
+        self.assertIn("cfg['listen_host']='0.0.0.0'",script)
+        self.assertIn("cfg['listen_port']=int(sys.argv[2])",script)
+        self.assertNotIn('systemctl restart pasarguard',script)
+        self.assertNotIn('docker restart',script)
+        self.assertNotIn('ufw allow',script)
+
     def test_no_real_server_ips_in_repo_defaults(self):
         content=(ROOT/'app'/'setup.py').read_text()
         self.assertIn("'node_ids':[]",content)
