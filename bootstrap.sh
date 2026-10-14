@@ -10,9 +10,9 @@ fi
 
 MODE="${1:-install}"
 case "$MODE" in
-  install|update) ;;
+  install|update|publish) ;;
   *)
-    echo 'Usage: bootstrap.sh [install|update]' >&2
+    echo 'Usage: bootstrap.sh [install|update|publish]' >&2
     exit 2
     ;;
 esac
@@ -53,11 +53,16 @@ if [[ "$MODE" == install ]]; then
   [[ -f "$TMP_DIR/source/install.sh" ]] || { echo 'install.sh was not found.' >&2; exit 1; }
   bash -n "$TMP_DIR/source/install.sh"
   bash "$TMP_DIR/source/install.sh"
-else
+elif [[ "$MODE" == update ]]; then
   echo '=== Starting interactive update ==='
   [[ -f "$TMP_DIR/source/update.sh" ]] || { echo 'update.sh was not found.' >&2; exit 1; }
   bash -n "$TMP_DIR/source/update.sh"
   bash "$TMP_DIR/source/update.sh"
+else
+  echo '=== Starting interactive public IP/port setup ==='
+  [[ -f "$TMP_DIR/source/publish.sh" ]] || { echo 'publish.sh was not found.' >&2; exit 1; }
+  bash -n "$TMP_DIR/source/publish.sh"
+  bash "$TMP_DIR/source/publish.sh"
 fi
 
 echo '=== Operation finished ==='
