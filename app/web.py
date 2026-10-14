@@ -137,6 +137,7 @@ def dashboard(params):
         # Per-provider UTC buckets for historical trend and cost drilldowns.
         # Rates/directions in this chart match the current-price estimate.
         provider_time_query = '''SELECT substr(s.collected_at,1,BUCKET_LEN) period,
+          s.node_id,MAX(s.node_name) node_name,
           COALESCE(NULLIF(m.provider,''),'بدون ارائه‌دهنده') provider,
           SUM(s.delta_down) down, SUM(s.delta_up) up,
           SUM(CASE COALESCE(m.bill_direction,?)
@@ -154,7 +155,7 @@ def dashboard(params):
           WHERE s.collected_at>=? AND s.collected_at<?
             AND COALESCE(m.enabled,1)=1
             AND (m.billing_since IS NULL OR m.billing_since='' OR s.collected_at>=m.billing_since)
-          GROUP BY period,provider ORDER BY period,provider'''
+          GROUP BY period,provider,s.node_id ORDER BY period,provider,s.node_id'''
         provider_params=(CFG.get('default_bill_direction','downlink'),
                          CFG.get('default_bill_direction','downlink'),
                          CFG.get('default_price_per_gb',0),begin,end)
@@ -192,7 +193,7 @@ def csrf_for(token):return mac('csrf:'+token)
 def html_response(page):return (ROOT/page).read_bytes()
 
 class Handler(BaseHTTPRequestHandler):
-    server_version='TrafficMonitor/0.2'
+    server_version='TrafficMonitor/1.0'
     def log_message(self, format, *args):
         # Avoid leaking headers/cookies. URI excludes credentials (in POST body).
         if not self.path.startswith('/api/'):
