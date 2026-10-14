@@ -50,8 +50,18 @@ def verify_token(token):
     except (ValueError,IndexError,UnicodeError):return False
 
 
-def utc_bounds(params):
-    tz=ZoneInfo(CFG.get('timezone','Asia/Tehran'))
+def display_preferences(db):
+    """Mutable presentation settings live in the monitor SQLite, not PasarGuard."""
+    defaults={'title':CFG.get('title','مدیریت ترافیک'),
+              'currency':CFG.get('currency','تومان'),
+              'timezone':CFG.get('timezone','Asia/Tehran')}
+    values={r['key']:r['value'] for r in
+            db.execute("SELECT key,value FROM settings WHERE key IN ('display_title','display_currency','display_timezone')")}
+    return {key:values.get('display_'+key,default) for key,default in defaults.items()}
+
+
+def utc_bounds(params, timezone_name=None):
+    tz=ZoneInfo(timezone_name or CFG.get('timezone','Asia/Tehran'))
     now=datetime.now(tz).date()
     lo=params.get('from',[(now-timedelta(days=6)).isoformat()])[0]
     hi=params.get('to',[now.isoformat()])[0]
@@ -65,8 +75,9 @@ def utc_bounds(params):
 
 
 def dashboard(params):
-    begin,end,lo,hi=utc_bounds(params)
     with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
+        preferences=display_preferences(db)
+        begin,end,lo,hi=utc_bounds(params,preferences['timezone'])
         ports=db.execute('''SELECT p.node_id,p.port,p.node_name,p.node_address,p.tag,p.last_seen,
          p.total_down,p.total_up,COALESCE(m.title,'') title,COALESCE(m.provider,'') provider,
          COALESCE(m.price_per_gb,?) price_per_gb,
@@ -110,8 +121,8 @@ def dashboard(params):
         return {'ports':combined,'daily':[dict(t) for t in times], 'providers':providers,
                 'total':total,'period':{'from':lo,'to':hi},
                 'last_run':dict(last) if last else None,
-                'title':CFG.get('title','مدیریت ترافیک'),'currency':CFG.get('currency','تومان'),
-                'timezone':CFG.get('timezone','Asia/Tehran')}
+                'title':preferences['title'],'currency':preferences['currency'],
+                'timezone':preferences['timezone']}
 
 
 def csrf_for(token):return mac('csrf:'+token)
@@ -202,6 +213,55 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({'error':'خطای تأیید درخواست'},403)
         if path=='/api/logout':
             return self.redirect('/login',{'Set-Cookie':'pgtraffic_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict'})
+        if path=='/api/visible-ports':
+            try:
+                obj=json.loads(self.read_body())
+                if type(obj) is not dict: raise ValueError('Invalid request')
+                node_id=obj.get('node_id')
+                visible=obj.get('visible_ports')
+                if type(node_id) is not int or node_id < 1: raise ValueError('Invalid node ID')
+                if type(visible) is not list or len(visible)>65535 or any(
+                    type(p) is not int or p < 1 or p > 65535 for p in visible
+                ) or len(set(visible)) != len(visible):
+                    raise ValueError('Invalid port selection')
+                with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
+                    available={r['port'] for r in db.execute(
+                        'SELECT port FROM port_state WHERE node_id=?',(node_id,))}
+                    if not available or not set(visible).issubset(available):
+                        raise ValueError('Unknown node or port')
+                    with db:
+                        for port in available:
+                            db.execute('''INSERT INTO metadata(node_id,port,enabled)
+                                VALUES(?,?,?) ON CONFLICT(node_id,port)
+                                DO UPDATE SET enabled=excluded.enabled''',
+                                (node_id,port,int(port in visible)))
+                return self.send_json({'ok':True,'message':'پورت‌های نمایشی ذخیره شدند.'})
+            except (ValueError,TypeError,KeyError) as exc:
+                return self.send_json({'error':str(exc)},400)
+        if path=='/api/display-settings':
+            try:
+                obj=json.loads(self.read_body())
+                if type(obj) is not dict: raise ValueError('Invalid request')
+                title=obj.get('title')
+                currency=obj.get('currency')
+                tz=obj.get('timezone')
+                if type(title) is not str or not 1<=len(title.strip())<=100:
+                    raise ValueError('عنوان معتبر نیست')
+                if type(currency) is not str or not 1<=len(currency.strip())<=20:
+                    raise ValueError('واحد پول معتبر نیست')
+                if type(tz) is not str or not 1<=len(tz)<=80:
+                    raise ValueError('منطقه زمانی معتبر نیست')
+                try: ZoneInfo(tz)
+                except (ValueError,KeyError): raise ValueError('منطقه زمانی ناشناخته است')
+                with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
+                    with db:
+                        for key,value in (('title',title.strip()),('currency',currency.strip()),('timezone',tz)):
+                            db.execute('''INSERT INTO settings(key,value) VALUES(?,?)
+                                ON CONFLICT(key) DO UPDATE SET value=excluded.value''',
+                                ('display_'+key,value))
+                return self.send_json({'ok':True,'message':'تنظیمات نمایش ذخیره شدند.'})
+            except (ValueError,KeyError,TypeError) as exc:
+                return self.send_json({'error':str(exc)},400)
         if path=='/api/metadata':
             try:
                 obj=json.loads(self.read_body())
@@ -236,7 +296,10 @@ class Handler(BaseHTTPRequestHandler):
         return self.send_json({'error':'یافت نشد'},404)
 
     def export_csv(self,params):
-        try:begin,end,_,_=utc_bounds(params)
+        try:
+            with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
+                timezone_name=display_preferences(db)['timezone']
+            begin,end,_,_=utc_bounds(params,timezone_name)
         except ValueError as e:return self.send_json({'error':str(e)},400)
         nid=params.get('node_id',[''])[0]
         port=params.get('port',[''])[0]
