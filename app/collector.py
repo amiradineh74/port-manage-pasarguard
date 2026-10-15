@@ -10,6 +10,7 @@ import sys
 from datetime import datetime, timezone
 
 from storage import connect, insert_poll
+from units import selected_unit, selected_bytes_per_unit
 
 
 def load_config(path):
@@ -60,7 +61,7 @@ def collect(config_file):
         if not payload['nodes']:
             raise RuntimeError('No stats received (no rows will be written)')
         timestamp = datetime.now(timezone.utc).isoformat(timespec='seconds')
-        with connect(data_dir / 'traffic.sqlite3') as db:
+        with connect(data_dir / 'traffic.sqlite3', cfg.get('traffic_unit')) as db:
             count = insert_poll(db, payload, timestamp, cfg)
         print('OK: %s samples | %s node(s) | %s' % (count,len(payload['nodes']),timestamp))
         for error in payload.get('errors',[]):
@@ -74,15 +75,17 @@ def collect(config_file):
 
 
 def show_report(cfg):
-    with connect(Path(cfg['data_dir'])/'traffic.sqlite3') as db:
+    with connect(Path(cfg['data_dir'])/'traffic.sqlite3', cfg.get('traffic_unit')) as db:
         rows = db.execute('''SELECT p.node_name,p.port,p.tag,p.total_down,p.total_up,p.last_seen,
           COALESCE(m.title,''),COALESCE(m.provider,'')
           FROM port_state p LEFT JOIN metadata m ON m.node_id=p.node_id AND m.port=p.port
           ORDER BY p.node_name,p.port''').fetchall()
-        print('NODE | PORT | TITLE | DOWNLOAD(GB) | UPLOAD(GB) | LAST UTC')
+        divisor=selected_bytes_per_unit(db)
+        label=selected_unit(db)
+        print('NODE | PORT | TITLE | DOWNLOAD('+label+') | UPLOAD('+label+') | LAST UTC')
         for r in rows:
             print('%s | %s | %s | %.4f | %.4f | %s' %
-                 (r[0],r[1],r[6] or '-',r[3]/1e9,r[4]/1e9,r[5]))
+                 (r[0],r[1],r[6] or '-',r[3]/divisor,r[4]/divisor,r[5]))
         if not rows: print('No collected data yet.')
 
 
@@ -97,7 +100,7 @@ def main():
     cfg = load_config(args.config)
     if args.action=='once': return collect(args.config)
     if args.action=='init':
-        with connect(Path(cfg['data_dir'])/'traffic.sqlite3'): pass
+        with connect(Path(cfg['data_dir'])/'traffic.sqlite3',cfg.get('traffic_unit')): pass
         print('Database initialized (independent of PasarGuard)')
         return 0
     if args.action=='report': return show_report(cfg)
