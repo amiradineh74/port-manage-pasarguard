@@ -148,6 +148,74 @@ def link_provider_account(db,data):
     sync_provider_bindings(db)
     return account_id
 
+def provider_paths(db,provider):
+    """Metadata is the only authoritative source for provider/port ownership here."""
+    return [dict(r) for r in db.execute('''SELECT p.node_id,p.port,
+          m.bill_direction,m.price_per_gb
+          FROM metadata m JOIN port_state p ON p.node_id=m.node_id AND p.port=m.port
+          WHERE m.provider=? ORDER BY p.node_id,p.port''',(provider,))]
+
+def sync_provider_port(db,provider,node_id,port,direction,rate_toman):
+    """Bind a freshly configured port without rewriting old sample checkpoints."""
+    association=db.execute(
+        'SELECT account_id FROM provider_wallet_links WHERE provider=?',(provider,)).fetchone()
+    if not association:return
+    account_id=association['account_id']
+    existing=db.execute('SELECT account_id FROM supplier_ports WHERE node_id=? AND port=?',
+                        (node_id,port)).fetchone()
+    if existing:
+        if existing['account_id']!=account_id:
+            raise ValueError('این پورت قبلاً به کیف پول دیگری متصل شده؛ ابتدا اتصال قبلی را بررسی کنید')
+        return
+    account=known_account(db,account_id)
+    if direction not in DIRECTIONS:raise ValueError('جهت ترافیک نامعتبر است')
+    rate=0 if account['kind']=='volume' else int((
+        Decimal(str(rate_toman))*Decimal(10)).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
+    db.execute('''INSERT INTO supplier_ports
+       (account_id,node_id,port,started_at,direction,rate_rial_per_gb)
+       VALUES(?,?,?,?,?,?)''',(account_id,node_id,port,utc_now(),direction,rate))
+
+def assign_provider_wallet(db,data):
+    """Create or reuse one wallet for an existing provider; never recreate port records."""
+    if type(data) is not dict:raise ValueError('اطلاعات ارائه‌دهنده نامعتبر است')
+    provider=text_field(data.get('provider'),'نام ارائه‌دهنده',128,True)
+    if provider=='بدون ارائه‌دهنده':raise ValueError('ابتدا برای پورت‌ها نام ارائه‌دهنده تنظیم کنید')
+    paths=provider_paths(db,provider)
+    if not paths:raise ValueError('برای این ارائه‌دهنده هنوز پورتی ثبت نشده است')
+    if db.execute('SELECT 1 FROM provider_wallet_links WHERE provider=?',(provider,)).fetchone():
+        raise ValueError('این ارائه‌دهنده از قبل کیف پول دارد')
+    existing_id=data.get('existing_account_id')
+    if existing_id is not None:
+        account=known_account(db,existing_id)
+        if db.execute('SELECT 1 FROM provider_wallet_links WHERE account_id=?',
+                      (existing_id,)).fetchone():
+            raise ValueError('این کیف پول به ارائه‌دهنده دیگری اختصاص دارد')
+        incompatible=db.execute('''SELECT b.node_id,b.port FROM supplier_ports b
+              LEFT JOIN metadata m ON m.node_id=b.node_id AND m.port=b.port
+              WHERE b.account_id=? AND COALESCE(m.provider,'')!=? LIMIT 1''',
+              (existing_id,provider)).fetchone()
+        if incompatible:raise ValueError('این حساب پورت متعلق به ارائه‌دهنده دیگری دارد')
+        account_id=existing_id
+    else:
+        account_id=create_account(db,{
+            'kind':data.get('kind'),
+            'title':provider,
+            'bot_handle':data.get('bot_handle',''),
+            'opening_amount':data.get('opening_amount'),
+            'notes':data.get('notes','')})
+    # Preflight all conflicts BEFORE inserting any links, in a single transaction.
+    for row in paths:
+        existing=db.execute('SELECT account_id FROM supplier_ports WHERE node_id=? AND port=?',
+                            (row['node_id'],row['port'])).fetchone()
+        if existing and existing['account_id']!=account_id:
+            raise ValueError('پورت '+str(row['port'])+' قبلاً به حساب دیگری متصل است')
+    db.execute('INSERT INTO provider_wallet_links(provider,account_id) VALUES(?,?)',
+               (provider,account_id))
+    for row in paths:
+        sync_provider_port(db,provider,row['node_id'],row['port'],
+                           row['bill_direction'],row['price_per_gb'])
+    return account_id
+
 def add_credit(db,data):
     account=known_account(db,data.get('account_id'))
     amount=require_int(data.get('amount'),'مقدار شارژ/حجم خریداری‌شده',1)
@@ -210,6 +278,9 @@ def wallet_report(db):
         FROM supplier_accounts a LEFT JOIN supplier_provider_links l
         ON l.account_id=a.id ORDER BY a.id DESC''').fetchall():
         account=dict(a)
+        association=db.execute('SELECT provider FROM provider_wallet_links WHERE account_id=?',
+                               (a['id'],)).fetchone()
+        account['provider']=association['provider'] if association else ''
         bindings=[dict(r) for r in db.execute('''SELECT b.*,p.node_name
            FROM supplier_ports b LEFT JOIN port_state p ON p.node_id=b.node_id AND p.port=b.port
            WHERE b.account_id=? ORDER BY b.node_id,b.port''',(a['id'],))]
