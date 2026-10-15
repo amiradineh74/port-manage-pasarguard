@@ -7,7 +7,6 @@
 <a href="#providers-section">نمودار و ارائه‌دهندگان</a>
 <a href="#ports-section">گزارش پورت‌ها</a>
 <a href="#manage">مدیریت پورت‌ها</a>
-<a href="#wallets">کیف پول و حجم خریداری‌شده</a>
 <a href="#expenses">هزینه‌های ثابت</a>
 <a href="#settings-section">تنظیمات</a>
 </nav>
@@ -19,7 +18,7 @@
 <section id="status" class="notice">در حال دریافت آمار...</section>
 <section class="metrics"><article class="metric"><span>دانلود</span><strong id="down">—</strong></article><article class="metric"><span>آپلود</span><strong id="up">—</strong></article><article class="metric"><span>حجم مشمول هزینه</span><strong id="billed">—</strong></article><article class="metric accent"><span>هزینه ترافیک با تعرفه فعلی</span><strong id="cost">—</strong><small id="historical-cost" class="sub" title="مجموع هزینه‌های ثبت‌شده با تعرفه زمان هر نمونه">هزینه ثبت‌شده قبلی: —</small></article><article class="metric"><span>هزینه‌های ثابت در بازه</span><strong id="fixed-cost">—</strong><small class="sub">پرداخت‌های ماهانه / یکباره ثبت‌شده</small></article><article class="metric accent"><span>جمع کل هزینه‌ها در بازه</span><strong id="all-cost">—</strong><small class="sub">ترافیک + هزینه ثابت تخصیص‌یافته</small></article></section>
 <section class="panel provider-analysis" id="providers-section">
-<div class="section-head"><div><h2>گزارش مصرف و هزینه ارائه‌دهنده‌ها</h2><p>هر ارائه‌دهنده را انتخاب کن، یا «همه» را بزن. ستون‌ها بر اساس نود رنگ‌بندی شده‌اند؛ روزها به تقویم شمسی نمایش داده می‌شوند.</p></div>
+<div class="section-head"><div><h2>گزارش مصرف و هزینه ارائه‌دهنده‌ها</h2><p>هر ارائه‌دهنده را انتخاب کن، یا «همه» را بزن. ستون‌ها بر اساس نود رنگ‌بندی شده‌اند؛ روزها به تقویم شمسی نمایش داده می‌شوند. اعتبار پولی و حجمی هم داخل کارت هر ارائه‌دهنده مدیریت می‌شود.</p></div>
 <div class="legend"><label>فیلتر نود <select id="node-filter"><option value="all">همه نودها</option></select></label>
 <label>بازه نمودار <select id="chart-scale"><option value="auto">خودکار</option><option value="hourly">ساعتی</option><option value="daily">روزانه</option><option value="monthly">ماهانه (شمسی)</option></select></label></div></div>
 <div class="providers" id="providers"></div><p id="provider-detail" class="sub" aria-live="polite"></p>
@@ -47,15 +46,6 @@
     </form>
     <p class="sub">تغییرات این بخش فقط در دیتابیس مستقل مانیتورینگ ذخیره می‌شود. تغییر تعرفه و نام هر پورت از دکمه «ویرایش» جدول بالا انجام می‌شود.</p>
   </div>
-</section>
-<section class="panel" id="wallets">
- <div class="section-head"><div><h2>کیف پول و حجم خریداری‌شده ربات‌ها</h2>
- <p>موجودی تخمینی هر تأمین‌کننده از زمان ثبت مانده اولیه، به تفکیک پورت؛ بدون اتصال به حساب ربات.</p></div>
- <button class="primary" type="button" id="wallet-new">افزودن ربات / حساب</button></div>
- <div class="expense-formula" role="note"><strong>روش محاسبه</strong>
- <span>کیف پول: مانده اولیه + شارژهای بعدی − (حجم مشمول هزینه × تعرفه اختصاصی هر پورت). بسته حجمی: حجم باقیمانده اولیه + خریدهای بعدی − حجم مصرف ثبت‌شده. مصرف قبل از زمان اتصال پورت محاسبه نمی‌شود.</span></div>
- <div class="wallets-grid" id="wallets-list"><p class="sub">حسابی ثبت نشده است.</p></div>
- <p class="sub">مقادیر تخمینی هستند؛ سربار تونل، روش صورتحساب تأمین‌کننده و اختلاف زمان نمونه‌برداری ممکن است اختلاف ایجاد کنند. مبلغ شارژی که قبلاً داخل موجودی اولیه محاسبه شده را دوباره ثبت نکنید.</p>
 </section>
 <section class="panel" id="expenses">
 <div class="section-head"><div><h2>دفتر هزینه‌های ثابت و جانبی</h2><p>هزینه‌های ماهانه و یکباره. مبلغ «هزینه این بازه» فقط سهم روزهای انتخاب‌شده از ماه میلادی است؛ مبلغ پایه، هزینه کامل ماهانه یا پرداخت یکباره است.</p></div><div class="cost-header-actions"><a href="#" class="minor linkbutton" id="export-expenses">خروجی CSV هزینه‌ها</a><button class="primary" type="button" id="new-expense">ثبت هزینه جدید</button></div></div>
@@ -86,24 +76,23 @@
 <p class="sub">هزینه ماهانه برای ماه‌های میلادی بر اساس تعداد روزهای داخل بازه تقسیم می‌شود. این هزینه از مانیتورینگ مستقل است؛ هیچ تغییری در سرور یا پنل اصلی ایجاد نمی‌کند.</p>
 <div class="buttons"><button type="button" class="minor" id="expense-cancel">انصراف</button><button type="submit" class="primary">ذخیره هزینه</button></div>
 </form></dialog>
-<dialog id="wallet-create-dialog"><form id="wallet-create-form" method="dialog">
-<h2>افزودن ربات یا حساب تأمین‌کننده</h2>
-<label>نام حساب<input id="wallet-title" required maxlength="128" placeholder="مثلاً ربات خرید پورت"></label>
-<label>شناسه ربات / توضیح<input id="wallet-handle" maxlength="128" placeholder="@example_bot"></label>
-<label>نوع اعتبار<select id="wallet-kind"><option value="money">کیف پول پولی (تومان)</option><option value="volume">حجم خریداری‌شده (GB)</option></select></label>
-<label>موجودی فعلی ربات به <span id="wallet-open-unit">تومان</span><input id="wallet-opening" type="number" min="0" step="1" required inputmode="decimal"></label>
-<label>یادداشت<input id="wallet-notes" maxlength="1000" placeholder="اختیاری"></label>
-<p class="sub">مقدار را از موجودی «همین الان» ربات وارد کن. این یک نقطه شروع جدید است؛ شارژهای قبلی را جداگانه ثبت نکن. نمونه‌های مصرف پس از اتصال هر پورت کسر می‌شوند.</p>
-<div class="buttons"><button class="minor" type="button" id="wallet-create-cancel">انصراف</button><button type="submit" class="primary">ثبت حساب</button></div>
-</form></dialog>
-<dialog id="wallet-port-dialog"><form id="wallet-port-form" method="dialog">
-<h2>اتصال پورت به کیف پول / سهمیه</h2>
-<input type="hidden" id="wallet-port-account">
-<label>انتخاب نود و پورت<select id="wallet-port-identity" required></select></label>
-<label>جهت محاسبه مصرف<select id="wallet-port-direction"><option value="both">مجموع دانلود + آپلود</option><option value="downlink">فقط دانلود</option><option value="uplink">فقط آپلود</option></select></label>
-<label id="wallet-port-rate-wrap">تعرفه هر GB (تومان)<input type="number" step="1" min="0" id="wallet-port-rate" required value="0"></label>
-<p class="sub">ثبت اتصال، نقطه شروع مصرف این پورت است. برای حساب حجمی فقط GB مصرف‌شده کسر می‌شود؛ برای حساب پولی نرخ هر GB روی حجم مشمول اعمال می‌شود.</p>
-<div class="buttons"><button type="button" class="minor" id="wallet-port-cancel">انصراف</button><button type="submit" class="primary">اتصال پورت</button></div>
+<dialog id="provider-wallet-dialog"><form id="provider-wallet-form" method="dialog">
+<h2>مدیریت اعتبار ارائه‌دهنده</h2>
+<input id="provider-wallet-name" type="hidden">
+<p>ارائه‌دهنده: <strong id="provider-wallet-display"></strong></p>
+<label>روش ثبت اعتبار<select id="provider-wallet-mode">
+<option value="new">ثبت موجودی فعلی</option>
+<option value="existing">اتصال به حسابی که قبلاً ساخته‌ام</option>
+</select></label>
+<div id="provider-wallet-existing-wrap" hidden><label>حساب قبلی<select id="provider-wallet-existing"></select></label>
+<p class="sub">اطلاعات، شارژها و زمان شروع محاسبه این حساب حفظ می‌شود؛ فقط پورت‌های متعلق به همین ارائه‌دهنده به آن وصل می‌شوند.</p></div>
+<div id="provider-wallet-new-wrap">
+<label>نوع اعتبار<select id="provider-wallet-kind"><option value="money">موجودی پولی (تومان)</option><option value="volume">اعتبار حجمی (GB)</option></select></label>
+<label>موجودی فعلی ربات به <span id="provider-wallet-unit">تومان</span><input id="provider-wallet-opening" type="number" required min="0" step="1" inputmode="decimal"></label>
+<label>شناسه ربات (اختیاری)<input id="provider-wallet-handle" maxlength="128" placeholder="@supplierbot"></label>
+</div>
+<p class="sub">پورت‌ها و تعرفه هر گیگ از اطلاعاتی که قبلاً برای همین ارائه‌دهنده ثبت کردی خوانده می‌شوند. مصرف قبل از ثبت اعتبار مجدداً کسر نمی‌شود. اگر چند نرخ داری، تعرفه هر پورت را از بخش «فهرست پورت‌ها» تعیین کن.</p>
+<div class="buttons"><button class="minor" type="button" id="provider-wallet-cancel">انصراف</button><button class="primary" type="submit">ثبت و اتصال خودکار پورت‌ها</button></div>
 </form></dialog>
 <dialog id="wallet-credit-dialog"><form id="wallet-credit-form" method="dialog">
 <h2 id="wallet-credit-heading">افزایش شارژ یا حجم</h2>
