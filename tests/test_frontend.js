@@ -8,6 +8,9 @@ const elements=new Map();
 function elem(id){
  if(!elements.has(id)){
   elements.set(id,{id,value:'',innerHTML:'',textContent:'',checked:false,dataset:{},
+   attributes:{},setAttribute(k,v){this.attributes[k]=String(v);},
+   removeAttribute(k){delete this.attributes[k];},
+   getAttribute(k){return this.attributes[k]||null;},
    addEventListener(){},querySelectorAll(){return[];},showModal(){},close(){},selectedIndex:0});
  }
  return elements.get(id);
@@ -25,6 +28,13 @@ for(const name of navigationLabels)assert.ok(dashboardTemplate.includes('>'+name
 assert.ok(dashboardTemplate.indexOf('id="expenses"')>dashboardTemplate.indexOf('id="manage"'),
  'Fixed costs must follow management/settings section');
 assert.ok(dashboardTemplate.includes('class="expense-formula"'));
+assert.ok(dashboardTemplate.includes('id="main-nav"'));
+assert.ok(dashboardTemplate.includes('id="nav-toggle"'));
+assert.ok(dashboardTemplate.includes('id="nav-backdrop"'));
+const css=fs.readFileSync(path.join(__dirname,'../app/style.css'),'utf8');
+assert.ok(css.includes('position:fixed;inset:16px 16px 16px auto'));
+assert.ok(css.includes('.section-nav[data-open="true"]'));
+
 const storage=new Map();
 const daily=[
  {period:'2026-10-14',node_id:3,node_name:'Turkey',provider:'A',down:2000000000,up:500000000,cost:120.234,historical_cost:15},
@@ -47,6 +57,16 @@ vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8'),ctx,{filename:'dashboard.js'});
 (async()=>{
  await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(elem('main-nav').dataset.open,'false');
+ assert.equal(elem('nav-toggle').attributes['aria-expanded'],'false');
+ vm.runInContext('setNavigationOpen(true)',ctx);
+ assert.equal(elem('main-nav').dataset.open,'true');
+ assert.equal(elem('nav-toggle').attributes['aria-expanded'],'true');
+ assert.equal(elem('nav-backdrop').hidden,false);
+ vm.runInContext('setNavigationOpen(false)',ctx);
+ assert.equal(elem('main-nav').dataset.open,'false');
+ assert.equal(elem('nav-backdrop').hidden,true);
+
  const n=vm.runInContext('chartColors.length',ctx);
  const unique=vm.runInContext('new Set(chartColors).size',ctx);
  assert.equal(n,20);assert.equal(unique,20);
