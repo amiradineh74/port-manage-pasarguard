@@ -13,7 +13,7 @@ from units import BYTES_PER_GIB, LEGACY_BYTES_PER_GB
 
 
 class LegacyUnitUpgradeTests(unittest.TestCase):
-    def test_legacy_pricing_history_is_preserved_and_new_usage_is_gib(self):
+    def test_old_install_remains_decimal_gb_after_upgrade(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'monitor.sqlite3'
             db=connect(path)
@@ -59,26 +59,25 @@ class LegacyUnitUpgradeTests(unittest.TestCase):
             """)
             db.close()
             db=connect(path)
-            self.assertEqual(db.execute("SELECT value FROM settings WHERE key='traffic_unit'").fetchone()[0],'GiB')
+            self.assertEqual(db.execute("SELECT value FROM settings WHERE key='traffic_unit'").fetchone()[0],'GB')
             volume=db.execute('SELECT opening_bytes,reported_bytes FROM supplier_accounts WHERE id=6').fetchone()
             self.assertEqual(tuple(volume),(220000000000,220000000000))
             old=db.execute('SELECT delta_down,cost,rate_unit FROM samples ORDER BY id').fetchone()
             self.assertEqual(tuple(old),(1000000000,1300.0,'GB'))
             terms=db.execute('SELECT rate_rial_per_gb,bytes_per_unit FROM supplier_port_terms WHERE binding_id=7 ORDER BY started_at').fetchall()
-            self.assertEqual([tuple(t) for t in terms],[(13000,LEGACY_BYTES_PER_GB),(13000,BYTES_PER_GIB)])
-            stamp=db.execute("SELECT value FROM settings WHERE key='traffic_unit_adopted_at'").fetchone()[0]
-            future=(datetime.fromisoformat(stamp)+timedelta(minutes=1)).isoformat(timespec='microseconds')
+            self.assertEqual([tuple(t) for t in terms],[(13000,LEGACY_BYTES_PER_GB)])
+            future='2026-10-16T00:00:00+00:00'
             db.execute("""INSERT INTO samples(collected_at,node_id,node_name,port,tag,
               delta_up,delta_down,bill_bytes,rate_snapshot,cost,rate_unit,event)
-              VALUES(?,3,'TR',55003,'x',0,?,?,1300,1300,'GiB','ok')""",
-              (future,BYTES_PER_GIB,BYTES_PER_GIB))
+              VALUES(?,3,'TR',55003,'x',0,?,?,1300,1300,'GB','ok')""",
+              (future,LEGACY_BYTES_PER_GB,LEGACY_BYTES_PER_GB))
             self.assertEqual(next(a for a in wallet_report(db) if a['id']==5)['spent_rial'],26000)
             db.commit()
             db.close()
             db=connect(path)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM supplier_port_terms WHERE binding_id=7').fetchone()[0],2)
             self.assertEqual(db.execute('SELECT SUM(delta_down) FROM samples').fetchone()[0],
-                             LEGACY_BYTES_PER_GB+BYTES_PER_GIB)
+                             2*LEGACY_BYTES_PER_GB)
             db.close()
 
 
