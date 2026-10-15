@@ -70,6 +70,9 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  vm.runInContext("state.currency='ریال'",ctx);
  elem('provider-wallet-opening').value='9.5';
  assert.equal(vm.runInContext("walletInputNumber('provider-wallet-opening','volume')",ctx),9500000000);
+ // Only traffic presentation uses IEC units; wallet accounting stays decimal GB.
+ assert.equal(vm.runInContext('traffic(1073741824)',ctx),'۱ GiB');
+ assert.equal(vm.runInContext("walletAmount(1000000000,'volume')",ctx),'۱ GB');
  assert.throws(()=>vm.runInContext("walletInputNumber('provider-wallet-opening','money')",ctx));
  vm.runInContext("state.wallets=[{id:11,provider:'A',title:'A',kind:'money',bot_handle:'@sample',estimated_balance:2422750,opening_rial:2437750,opening_bytes:0,credited:0,spent_rial:15000,used_bytes:1250000000,reported_balance:null,started_at:'2026-10-14T00:00:00+00:00',ports:[],credit_history:[],check_history:[]}];renderProviderPanels()",ctx);
  assert.ok(elem('providers').innerHTML.includes('۲٬۴۲۲٬۷۵۰'));
@@ -110,6 +113,8 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  elem('chart-scale').value='monthly';
  vm.runInContext('renderProviderPanels()',ctx);
  assert.ok(elem('chart').innerHTML.includes('<rect'));
+ assert.ok(elem('chart').innerHTML.includes(' GiB'));
+ assert.ok(elem('down').textContent.includes('GiB'));
  assert.ok(elem('node-legend').innerHTML.includes('Turkey'));
  assert.ok(elem('node-legend').innerHTML.includes('Germany'));
  assert.ok(elem('cost-chart').innerHTML.includes('نمودار ستونی'));
