@@ -74,6 +74,11 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  vm.runInContext("state.wallets=[{id:11,provider:'A',title:'A',kind:'money',bot_handle:'@sample',estimated_balance:2422750,opening_rial:2437750,opening_bytes:0,credited:0,spent_rial:15000,used_bytes:1250000000,reported_balance:null,started_at:'2026-10-14T00:00:00+00:00',ports:[],credit_history:[],check_history:[]}];renderProviderPanels()",ctx);
  assert.ok(elem('providers').innerHTML.includes('۲٬۴۲۲٬۷۵۰'));
  assert.ok(elem('providers').innerHTML.includes('provider-credit'));
+ vm.runInContext("state.wallets[0].reconciliation_summary={count:3,positive:150000,negative:100000,net:50000};state.wallets[0].reconciliation_history=[{id:3,checked_at:'2026-10-17T12:00:00+00:00',estimated_before:2300000,reported_amount:2250000,adjustment:-50000,note:'third'}, {id:2,checked_at:'2026-10-16T12:00:00+00:00',estimated_before:2150000,reported_amount:2300000,adjustment:150000,note:'second'},{id:1,checked_at:'2026-10-14T12:00:00+00:00',estimated_before:2300000,reported_amount:2250000,adjustment:-50000,note:'first'}];renderProviderPanels()",ctx);
+ assert.ok(elem('providers').innerHTML.includes('تاریخچه همسان‌سازی'));
+ assert.ok(elem('providers').innerHTML.includes('اختلاف خالص'));
+ assert.ok(elem('providers').innerHTML.includes('second'));
+ assert.ok(elem('providers').innerHTML.includes('first'));
  assert.ok(elem('providers').innerHTML.includes('جزئیات و گزارش پورت‌ها'));
  vm.runInContext("openProviderReport('A')",ctx);
  assert.ok(elem('provider-report-title').textContent.includes('A'));
