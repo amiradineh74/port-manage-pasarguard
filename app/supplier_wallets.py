@@ -3,12 +3,12 @@
 A supplier account starts at a manually recorded balance checkpoint. Port bindings
 start when saved; only subsequently collected Xray deltas are counted. Provider
 reported balances are comparison snapshots, never automatically treated as credits.
-All money is integer IRR; new volume inputs and price units are binary GiB.
-Legacy decimal-GB rate terms retain their original divisor for audit.
+All money is integer IRR. Volume and rate units use the single installation-wide
+GB/GiB choice; historical rate terms retain their original divisor for audit.
 """
 from datetime import datetime,timezone
 from decimal import Decimal, ROUND_HALF_UP
-from units import BYTES_PER_GIB
+from units import selected_bytes_per_unit
 
 MAX_AMOUNT=10**15
 DIRECTIONS=('downlink','uplink','both')
@@ -74,7 +74,7 @@ def attach_port(db,data):
     db.execute('''INSERT INTO supplier_ports
         (account_id,node_id,port,started_at,direction,rate_rial_per_gb,bytes_per_unit)
         VALUES(?,?,?,?,?,?,?)''',
-        (account['id'],node,port,utc_now(),direction,rate,BYTES_PER_GIB))
+        (account['id'],node,port,utc_now(),direction,rate,selected_bytes_per_unit(db)))
     return db.execute('SELECT last_insert_rowid()').fetchone()[0]
 
 def provider_paths(db,provider):
@@ -104,13 +104,13 @@ def sync_provider_port(db,provider,node_id,port,direction,rate_toman):
     previous_direction=latest['direction'] if latest else row['direction']
     previous_rate=latest['rate_rial_per_gb'] if latest else row['rate_rial_per_gb']
     previous_unit=latest['bytes_per_unit'] if latest else row['bytes_per_unit']
-    if previous_direction!=direction or previous_rate!=rate or previous_unit!=BYTES_PER_GIB:
+    if previous_direction!=direction or previous_rate!=rate or previous_unit!=selected_bytes_per_unit(db):
         db.execute('''INSERT INTO supplier_port_terms
           (binding_id,started_at,direction,rate_rial_per_gb,bytes_per_unit) VALUES(?,?,?,?,?)
           ON CONFLICT(binding_id,started_at) DO UPDATE SET
              direction=excluded.direction,rate_rial_per_gb=excluded.rate_rial_per_gb,
              bytes_per_unit=excluded.bytes_per_unit''',
-          (row['id'],utc_now(),direction,rate,BYTES_PER_GIB))
+          (row['id'],utc_now(),direction,rate,selected_bytes_per_unit(db)))
 
 def _selected_paths(db,provider,ports):
     if not isinstance(ports,list) or len(ports)>200:
@@ -158,7 +158,7 @@ def _apply_ports(db,account_id,provider,selected,now,allow_transfer=False):
                 Decimal('1'),rounding=ROUND_HALF_UP))
         db.execute('''INSERT INTO supplier_ports
             (account_id,node_id,port,started_at,direction,rate_rial_per_gb,bytes_per_unit)
-            VALUES(?,?,?,?,?,?,?)''',(account_id,p['node_id'],p['port'],now,direction,rate,BYTES_PER_GIB))
+            VALUES(?,?,?,?,?,?,?)''',(account_id,p['node_id'],p['port'],now,direction,rate,selected_bytes_per_unit(db)))
 
 def assign_provider_wallet(db,data):
     """Create/link/edit an independent account and explicitly choose its ports.
