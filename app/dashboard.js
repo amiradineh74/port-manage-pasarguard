@@ -3,10 +3,11 @@ const $=id=>document.getElementById(id);
 let state=null;
 let selectedProvider='__all__';
 const fmt=n=>new Intl.NumberFormat('fa-IR',{maximumFractionDigits:2}).format(n||0);
-const bytesPerGiB=1024**3,bytesPerMiB=1024**2;
-// Display traffic in IEC binary units, matching PasarGuard's usage charts.
-// Keep supplier wallet quantities and monetary rates in decimal GB (1e9 bytes).
-const traffic=n=>(n/bytesPerGiB>=1?fmt(n/bytesPerGiB)+' GiB':fmt(n/bytesPerMiB)+' MiB');
+const volumeUnit=()=>state?.traffic_unit==='GB'?'GB':volumeUnit();
+const smallerUnit=()=>volumeUnit()==='GB'?'MB':'MiB';
+const bytesPerUnit=()=>volumeUnit()==='GB'?1e9:1024**3;
+const bytesPerSmallUnit=()=>volumeUnit()==='GB'?1e6:1024**2;
+const traffic=n=>(n/bytesPerUnit()>=1?fmt(n/bytesPerUnit())+' '+volumeUnit():fmt(n/bytesPerSmallUnit())+' '+smallerUnit());
 const isRial=()=>['ریال','Rial','IRR'].includes(state?.currency);
 const unit=()=>isRial()?'ریال':'تومان';
 const multiplier=()=>isRial()?10:1;
@@ -67,7 +68,7 @@ function stackedBars(id,groups,field){
  const w=Math.min(5500,Math.max(760,groups.length*38+left+right));
  const barArea=w-left-right;
  const barWidth=Math.max(3,Math.min(65,barArea/groups.length*.68));
- const amounts=groups.map(g=>[...g.nodes.values()].reduce((acc,node)=>acc+(field==='traffic'?(node.down+node.up)/bytesPerGiB:node.cost*multiplier()),0));
+ const amounts=groups.map(g=>[...g.nodes.values()].reduce((acc,node)=>acc+(field==='traffic'?(node.down+node.up)/bytesPerUnit():node.cost*multiplier()),0));
  const max=Math.max(.0001,...amounts)*1.12;
  const y=val=>h-bottom-(h-bottom-top)*val/max;
  let svg='<svg class="stacked-chart" role="img" aria-label="'+(field==='traffic'?'نمودار ستونی حجم تفکیک نود':'نمودار ستونی هزینه تفکیک نود')+'" viewBox="0 0 '+w+' '+h+'" style="min-width:'+w+'px">';
@@ -75,7 +76,7 @@ function stackedBars(id,groups,field){
   const v=max*k/4,Y=y(v);
   svg+='<line x1="'+left+'" y1="'+Y+'" x2="'+(w-right)+'" y2="'+Y+'" stroke="var(--chart-grid,#294059)"/>';
   svg+='<text x="'+(left-8)+'" y="'+(Y+4)+'" text-anchor="end" fill="var(--chart-label,#a6b9d1)" font-size="12">'+
-    escapeHtml((field==='traffic'?fmt(v):isRial()?rialFormatter.format(Math.round(v)):fmt(v))+(field==='traffic'?' GiB':' '+unit()))+'</text>';
+    escapeHtml((field==='traffic'?fmt(v):isRial()?rialFormatter.format(Math.round(v)):fmt(v))+(field==='traffic'?' '+volumeUnit():' '+unit()))+'</text>';
  }
  const step=Math.max(1,Math.ceil(groups.length/10));
  for(let i=0;i<groups.length;i++){
@@ -83,7 +84,7 @@ function stackedBars(id,groups,field){
   let sum=0;
   for(const nid of selectedIds){
    const item=g.nodes.get(nid);if(!item)continue;
-   const value=field==='traffic'?(item.down+item.up)/bytesPerGiB:item.cost*multiplier();
+   const value=field==='traffic'?(item.down+item.up)/bytesPerUnit():item.cost*multiplier();
    if(value<=0)continue;
    const height=(h-bottom-top)*value/max,Y=y(sum+value);
    const title=periodLabel(g.period)+' | '+item.node_name+
@@ -314,7 +315,7 @@ function renderExpenseCosts(trafficCost){
 }
 function walletAmount(value,kind){
  if(kind==='money')return rialFormatter.format(Math.round(isRial()?value:value/10))+' '+unit();
- return new Intl.NumberFormat('fa-IR',{maximumFractionDigits:3}).format(value/bytesPerGiB)+' GiB';
+ return new Intl.NumberFormat('fa-IR',{maximumFractionDigits:3}).format(value/bytesPerUnit())+' '+volumeUnit();
 }
 function walletDate(utc){
  if(!utc)return '—';
@@ -398,7 +399,7 @@ function providerWalletDetails(name){
     a.ports.map(p=>'<p class="sub">'+escapeHtml(p.node_name||('Node '+p.node_id))+' / '+p.port+
      (p.ended_at?' · اتصال پایان‌یافته':' · فعال')+
      ' · '+walletAmount(p.billed_bytes,'volume')+
-     (a.kind==='money'?' · نرخ فعلی '+walletAmount(p.rate_rial_per_gb,'money')+'/GiB':'')+'</p>').join('')+
+     (a.kind==='money'?' · نرخ فعلی '+walletAmount(p.rate_rial_per_gb,'money')+'/'+volumeUnit():'')+'</p>').join('')+
     (a.credit_history||[]).map(t=>'<p class="sub">شارژ '+walletAmount(t.amount,a.kind)+' — '+escapeHtml(walletDate(t.created_at))+'</p>').join('')+
     (a.check_history||[]).map(t=>'<p class="sub">مقایسه · مانده ربات '+walletAmount(t.reported_amount,a.kind)+
      ' · اختلاف '+walletAmount(t.difference,a.kind)+' — '+escapeHtml(walletDate(t.checked_at))+'</p>').join('')+
@@ -424,7 +425,7 @@ function refreshProviderWalletForm(){
  $('provider-wallet-new-wrap').hidden=mode!=='new';
  $('provider-wallet-title').required=mode==='new';
  $('provider-wallet-opening').required=mode==='new';
- $('provider-wallet-unit').textContent=quota?'GiB':unit();
+ $('provider-wallet-unit').textContent=quota?volumeUnit():unit();
  $('provider-wallet-opening').step=quota?'any':'1';
 }
 function activeProviderAssignment(nodeId,port){
@@ -471,13 +472,13 @@ function openWalletDialog(type,id){
  const a=walletById(id);if(!a)return;
  if(type==='credit'){
   $('wallet-credit-account').value=String(id);
-  $('wallet-credit-unit').textContent=a.kind==='money'?unit():'GiB';
+  $('wallet-credit-unit').textContent=a.kind==='money'?unit():volumeUnit();
   $('wallet-credit-heading').textContent=a.kind==='money'?'ثبت شارژ جدید':'ثبت حجم خریداری‌شده جدید';
   $('wallet-credit-amount').value='';$('wallet-credit-note').value='';
   $('wallet-credit-dialog').showModal();
  }else if(type==='reported'){
   $('wallet-reported-account').value=String(id);
-  $('wallet-reported-unit').textContent=a.kind==='money'?unit():'GiB';
+  $('wallet-reported-unit').textContent=a.kind==='money'?unit():volumeUnit();
   $('wallet-reported-amount').value='';
   $('wallet-reported-note').value='';
   $('wallet-reported-dialog').showModal();
