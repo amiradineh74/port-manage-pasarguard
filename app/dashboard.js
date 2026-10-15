@@ -314,7 +314,7 @@ function renderExpenseCosts(trafficCost){
 }
 function walletAmount(value,kind){
  if(kind==='money')return rialFormatter.format(Math.round(isRial()?value:value/10))+' '+unit();
- return new Intl.NumberFormat('fa-IR',{maximumFractionDigits:3}).format(value/1e9)+' GB';
+ return new Intl.NumberFormat('fa-IR',{maximumFractionDigits:3}).format(value/bytesPerGiB)+' GiB';
 }
 function walletDate(utc){
  if(!utc)return '—';
@@ -330,7 +330,7 @@ function walletInputNumber(field,kind){
  const n=Number($(field).value);
  if(!Number.isFinite(n)||n<0)throw Error('مقدار معتبر وارد کن.');
  if(kind==='money'&&!Number.isInteger(n))throw Error('مبلغ پولی را به صورت عدد صحیح و مطابق واحد پول پنل وارد کن.');
- const amount=Math.round(n*(kind==='money'?(isRial()?1:10):1e9));
+ const amount=Math.round(n*(kind==='money'?(isRial()?1:10):bytesPerGiB));
  if(!Number.isSafeInteger(amount)||amount<0)throw Error('مقدار خیلی بزرگ است.');
  return amount;
 }
@@ -398,7 +398,7 @@ function providerWalletDetails(name){
     a.ports.map(p=>'<p class="sub">'+escapeHtml(p.node_name||('Node '+p.node_id))+' / '+p.port+
      (p.ended_at?' · اتصال پایان‌یافته':' · فعال')+
      ' · '+walletAmount(p.billed_bytes,'volume')+
-     (a.kind==='money'?' · نرخ فعلی '+walletAmount(p.rate_rial_per_gb,'money')+'/GB':'')+'</p>').join('')+
+     (a.kind==='money'?' · نرخ فعلی '+walletAmount(p.rate_rial_per_gb,'money')+'/GiB':'')+'</p>').join('')+
     (a.credit_history||[]).map(t=>'<p class="sub">شارژ '+walletAmount(t.amount,a.kind)+' — '+escapeHtml(walletDate(t.created_at))+'</p>').join('')+
     (a.check_history||[]).map(t=>'<p class="sub">مقایسه · مانده ربات '+walletAmount(t.reported_amount,a.kind)+
      ' · اختلاف '+walletAmount(t.difference,a.kind)+' — '+escapeHtml(walletDate(t.checked_at))+'</p>').join('')+
@@ -424,7 +424,7 @@ function refreshProviderWalletForm(){
  $('provider-wallet-new-wrap').hidden=mode!=='new';
  $('provider-wallet-title').required=mode==='new';
  $('provider-wallet-opening').required=mode==='new';
- $('provider-wallet-unit').textContent=quota?'GB':unit();
+ $('provider-wallet-unit').textContent=quota?'GiB':unit();
  $('provider-wallet-opening').step=quota?'any':'1';
 }
 function activeProviderAssignment(nodeId,port){
@@ -471,13 +471,13 @@ function openWalletDialog(type,id){
  const a=walletById(id);if(!a)return;
  if(type==='credit'){
   $('wallet-credit-account').value=String(id);
-  $('wallet-credit-unit').textContent=a.kind==='money'?unit():'GB';
+  $('wallet-credit-unit').textContent=a.kind==='money'?unit():'GiB';
   $('wallet-credit-heading').textContent=a.kind==='money'?'ثبت شارژ جدید':'ثبت حجم خریداری‌شده جدید';
   $('wallet-credit-amount').value='';$('wallet-credit-note').value='';
   $('wallet-credit-dialog').showModal();
  }else if(type==='reported'){
   $('wallet-reported-account').value=String(id);
-  $('wallet-reported-unit').textContent=a.kind==='money'?unit():'GB';
+  $('wallet-reported-unit').textContent=a.kind==='money'?unit():'GiB';
   $('wallet-reported-amount').value='';
   $('wallet-reported-note').value='';
   $('wallet-reported-dialog').showModal();
