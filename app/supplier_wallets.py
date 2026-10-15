@@ -75,79 +75,6 @@ def attach_port(db,data):
                (account['id'],node,port,utc_now(),direction,rate))
     return db.execute('SELECT last_insert_rowid()').fetchone()[0]
 
-def assigned_provider_ports(db, provider):
-    # Metadata is the single source of truth for provider -> node/port identity.
-    # Hidden ports count too: hiding a row cannot make real supplier bills vanish.
-    return [(r['node_id'],r['port']) for r in db.execute(
-        '''SELECT p.node_id,p.port FROM port_state p JOIN metadata m
-        ON p.node_id=m.node_id AND p.port=m.port
-        WHERE m.provider=? ORDER BY p.node_id,p.port''',(provider,))]
-
-def sync_provider_bindings(db):
-    """Add newly assigned provider ports without ever touching usage samples.
-
-    Existing bindings are never rewritten: their historical checkpoint/rate is
-    financially meaningful. Conflicts are skipped, not silently reassigned.
-    """
-    for link in db.execute('SELECT * FROM supplier_provider_links').fetchall():
-        for node_id,port in assigned_provider_ports(db,link['provider']):
-            taken=db.execute('SELECT 1 FROM supplier_ports WHERE node_id=? AND port=?',
-                             (node_id,port)).fetchone()
-            if not taken:
-                db.execute('''INSERT INTO supplier_ports
-                    (account_id,node_id,port,started_at,direction,rate_rial_per_gb)
-                    VALUES(?,?,?,?,?,?)''',
-                    (link['account_id'],node_id,port,utc_now(),link['default_direction'],
-                     link['default_rate_rial_per_gb']))
-
-def link_provider_account(db,data):
-    """Set up a wallet directly on an already existing provider.
-
-    Either adopt an existing account (preserves all prior credit/check history),
-    or create exactly one new account without asking for port identities.
-    """
-    if type(data) is not dict:raise ValueError('درخواست نامعتبر است')
-    provider=text_field(data.get('provider'),'ارائه‌دهنده',128,True)
-    ports=assigned_provider_ports(db,provider)
-    if not ports:raise ValueError('ابتدا ارائه‌دهنده را به یک پورت واقعی اختصاص بدهید')
-    existing=db.execute('SELECT account_id FROM supplier_provider_links WHERE provider=?',
-                        (provider,)).fetchone()
-    if existing:raise ValueError('این ارائه‌دهنده کیف پول دارد؛ دوباره ایجادش نکنید')
-    direction=data.get('direction','both')
-    if direction not in DIRECTIONS:raise ValueError('جهت مصرف معتبر نیست')
-    rate=require_int(data.get('rate_rial_per_gb',0),'تعرفه ریالی',0,10**12)
-    old_id=data.get('existing_account_id')
-    if old_id is not None:
-        account=known_account(db,old_id)
-        linked=db.execute('SELECT provider FROM supplier_provider_links WHERE account_id=?',
-                          (old_id,)).fetchone()
-        if linked:raise ValueError('این حساب قبلاً به ارائه‌دهنده دیگری وصل شده')
-        if account['kind']=='volume' and rate:raise ValueError('حساب حجمی تعرفه ریالی ندارد')
-        # A manually linked account can be adopted only when its historical ports
-        # are all part of this provider; never alter an unrelated wallet.
-        old_ports=[(r['node_id'],r['port']) for r in db.execute(
-            'SELECT node_id,port FROM supplier_ports WHERE account_id=?',(old_id,))]
-        if not set(old_ports).issubset(set(ports)):
-            raise ValueError('برخی پورت‌های قبلی این حساب متعلق به این ارائه‌دهنده نیستند')
-        account_id=account['id']
-    else:
-        kind=data.get('kind')
-        if kind not in ('money','volume'):raise ValueError('نوع کیف پول معتبر نیست')
-        if kind=='volume' and rate:raise ValueError('حساب حجمی تعرفه ریالی ندارد')
-        account_id=create_account(db,{'title':provider,'bot_handle':'',
-           'kind':kind,'opening_amount':data.get('opening_amount'),'notes':''})
-    conflict=db.execute(
-        '''SELECT b.account_id FROM supplier_ports b JOIN metadata m
-           ON m.node_id=b.node_id AND m.port=b.port
-           WHERE m.provider=? AND b.account_id<>? LIMIT 1''',
-        (provider,account_id)).fetchone()
-    if conflict:raise ValueError('برخی پورت‌ها به کیف پول دیگری وصل‌اند؛ اتصال خودکار متوقف شد')
-    db.execute('''INSERT INTO supplier_provider_links
-      (provider,account_id,default_direction,default_rate_rial_per_gb)
-      VALUES(?,?,?,?)''',(provider,account_id,direction,rate))
-    sync_provider_bindings(db)
-    return account_id
-
 def provider_paths(db,provider):
     """Metadata is the only authoritative source for provider/port ownership here."""
     return [dict(r) for r in db.execute('''SELECT p.node_id,p.port,
@@ -270,13 +197,8 @@ def _estimate(db,account,bindings,until=None):
             'spent_rial':spent_rial,'ports':per_port}
 
 def wallet_report(db):
-    # Cheap SQLite-only synchronization; node IPs or tags are not used here.
-    with db:sync_provider_bindings(db)
     accounts=[]
-    for a in db.execute('''SELECT a.*,l.provider linked_provider,
-                        l.default_direction,l.default_rate_rial_per_gb
-        FROM supplier_accounts a LEFT JOIN supplier_provider_links l
-        ON l.account_id=a.id ORDER BY a.id DESC''').fetchall():
+    for a in db.execute('SELECT * FROM supplier_accounts ORDER BY id DESC').fetchall():
         account=dict(a)
         association=db.execute('SELECT provider FROM provider_wallet_links WHERE account_id=?',
                                (a['id'],)).fetchone()
