@@ -63,8 +63,7 @@ def attach_port(db,data):
     if db.execute('SELECT 1 FROM port_state WHERE node_id=? AND port=?',
                   (node,port)).fetchone() is None:
         raise ValueError('ابتدا باید این نود و پورت در مانیتور مشاهده شده باشد')
-    if db.execute('SELECT 1 FROM supplier_ports WHERE node_id=? AND port=?',
-                  (node,port)).fetchone():
+    if _current_port(db,node,port):
         raise ValueError('این نود و پورت قبلاً به حساب دیگری متصل شده؛ اتصال تکراری مجاز نیست')
     direction=data.get('direction')
     if direction not in DIRECTIONS:raise ValueError('جهت ترافیک معتبر نیست')
@@ -82,76 +81,125 @@ def provider_paths(db,provider):
           FROM metadata m JOIN port_state p ON p.node_id=m.node_id AND p.port=m.port
           WHERE m.provider=? ORDER BY p.node_id,p.port''',(provider,))]
 
+def _current_port(db,node,port):
+    return db.execute("""SELECT * FROM supplier_ports
+        WHERE node_id=? AND port=? AND ended_at=''""",(node,port)).fetchone()
+
 def sync_provider_port(db,provider,node_id,port,direction,rate_toman):
-    """Track an existing provider port and start new rates prospectively."""
-    association=db.execute(
-        'SELECT account_id FROM provider_wallet_links WHERE provider=?',(provider,)).fetchone()
-    if not association:return
-    account_id=association['account_id']
-    account=known_account(db,account_id)
+    """Reprice only *assigned* active ports; never attach unassigned ports implicitly."""
+    row=_current_port(db,node_id,port)
+    if row is None:return
+    linked=db.execute('SELECT provider FROM provider_wallet_links WHERE account_id=?',
+                      (row['account_id'],)).fetchone()
+    if not linked or linked['provider']!=provider:return
+    account=known_account(db,row['account_id'])
     if direction not in DIRECTIONS:raise ValueError('جهت ترافیک نامعتبر است')
     rate=0 if account['kind']=='volume' else int((
         Decimal(str(rate_toman))*Decimal(10)).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
-    existing=db.execute('SELECT * FROM supplier_ports WHERE node_id=? AND port=?',
-                        (node_id,port)).fetchone()
-    if existing:
-        if existing['account_id']!=account_id:
-            raise ValueError('این پورت قبلاً به کیف پول دیگری متصل شده؛ ابتدا اتصال قبلی را بررسی کنید')
-        latest=db.execute('''SELECT direction,rate_rial_per_gb FROM supplier_port_terms
-           WHERE binding_id=? ORDER BY started_at DESC,id DESC LIMIT 1''',
-           (existing['id'],)).fetchone()
-        last_dir=latest['direction'] if latest else existing['direction']
-        last_rate=latest['rate_rial_per_gb'] if latest else existing['rate_rial_per_gb']
-        if last_dir!=direction or last_rate!=rate:
-            db.execute('''INSERT INTO supplier_port_terms
-              (binding_id,started_at,direction,rate_rial_per_gb) VALUES(?,?,?,?)
-              ON CONFLICT(binding_id,started_at) DO UPDATE SET
-              direction=excluded.direction,rate_rial_per_gb=excluded.rate_rial_per_gb''',
-              (existing['id'],utc_now(),direction,rate))
-        return
-    db.execute('''INSERT INTO supplier_ports
-       (account_id,node_id,port,started_at,direction,rate_rial_per_gb)
-       VALUES(?,?,?,?,?,?)''',(account_id,node_id,port,utc_now(),direction,rate))
+    latest=db.execute('''SELECT direction,rate_rial_per_gb FROM supplier_port_terms
+       WHERE binding_id=? ORDER BY started_at DESC,id DESC LIMIT 1''',(row['id'],)).fetchone()
+    previous_direction=latest['direction'] if latest else row['direction']
+    previous_rate=latest['rate_rial_per_gb'] if latest else row['rate_rial_per_gb']
+    if previous_direction!=direction or previous_rate!=rate:
+        db.execute('''INSERT INTO supplier_port_terms
+          (binding_id,started_at,direction,rate_rial_per_gb) VALUES(?,?,?,?)
+          ON CONFLICT(binding_id,started_at) DO UPDATE SET
+             direction=excluded.direction,rate_rial_per_gb=excluded.rate_rial_per_gb''',
+          (row['id'],utc_now(),direction,rate))
+
+def _selected_paths(db,provider,ports):
+    if not isinstance(ports,list) or len(ports)>200:
+        raise ValueError('فهرست پورت‌ها معتبر نیست')
+    available={(r['node_id'],r['port']):r for r in provider_paths(db,provider)}
+    selected=[]
+    seen=set()
+    for entry in ports:
+        if type(entry) is not dict:raise ValueError('مشخصات پورت معتبر نیست')
+        node=require_int(entry.get('node_id'),'شناسه نود',1,2**31-1)
+        port=require_int(entry.get('port'),'شماره پورت',1,65535)
+        key=(node,port)
+        if key not in available:raise ValueError('پورت '+str(port)+' متعلق به این ارائه‌دهنده نیست')
+        if key in seen:raise ValueError('پورت تکراری است')
+        seen.add(key)
+        selected.append(available[key])
+    return selected
+
+def _apply_ports(db,account_id,provider,selected,now):
+    """Close prior active intervals and open new intervals; NEVER rewrite past usage."""
+    selected_keys={(p['node_id'],p['port']) for p in selected}
+    previous=db.execute('''SELECT * FROM supplier_ports
+        WHERE account_id=? AND ended_at='' ''',(account_id,)).fetchall()
+    for old in previous:
+        if (old['node_id'],old['port']) not in selected_keys:
+            db.execute("UPDATE supplier_ports SET ended_at=? WHERE id=?",(now,old['id']))
+    for p in selected:
+        active=_current_port(db,p['node_id'],p['port'])
+        if active and active['account_id']==account_id:
+            continue
+        if active:
+            # Explicit transfer preserves old account's consumed bytes and rate terms.
+            other_provider=db.execute('''SELECT provider FROM provider_wallet_links
+                WHERE account_id=?''',(active['account_id'],)).fetchone()
+            if not other_provider or other_provider['provider']!=provider:
+                raise ValueError('این پورت به حسابی خارج از این ارائه‌دهنده متصل است')
+            db.execute('UPDATE supplier_ports SET ended_at=? WHERE id=?',
+                       (now,active['id']))
+        direction=p['bill_direction']
+        account=known_account(db,account_id)
+        rate=0 if account['kind']=='volume' else int((
+            Decimal(str(p['price_per_gb']))*Decimal(10)).quantize(
+                Decimal('1'),rounding=ROUND_HALF_UP))
+        db.execute('''INSERT INTO supplier_ports
+            (account_id,node_id,port,started_at,direction,rate_rial_per_gb)
+            VALUES(?,?,?,?,?,?)''',(account_id,p['node_id'],p['port'],now,direction,rate))
 
 def assign_provider_wallet(db,data):
-    """Create or reuse one wallet for an existing provider; never recreate port records."""
-    if type(data) is not dict:raise ValueError('اطلاعات ارائه‌دهنده نامعتبر است')
-    provider=text_field(data.get('provider'),'نام ارائه‌دهنده',128,True)
-    if provider=='بدون ارائه‌دهنده':raise ValueError('ابتدا برای پورت‌ها نام ارائه‌دهنده تنظیم کنید')
+    """Create/link/edit an independent account and explicitly choose its ports.
+
+    Existing provider accounts and port intervals remain; transferring a port
+    ends one interval and starts another at the SAME timestamp.
+    """
+    if type(data) is not dict:raise ValueError('اطلاعات اعتبار نامعتبر است')
+    provider=text_field(data.get('provider'),'ارائه‌دهنده',128,True)
+    if provider=='بدون ارائه‌دهنده':raise ValueError('ابتدا نام ارائه‌دهنده ثبت کنید')
     paths=provider_paths(db,provider)
-    if not paths:raise ValueError('برای این ارائه‌دهنده هنوز پورتی ثبت نشده است')
-    if db.execute('SELECT 1 FROM provider_wallet_links WHERE provider=?',(provider,)).fetchone():
-        raise ValueError('این ارائه‌دهنده از قبل کیف پول دارد')
+    if not paths:raise ValueError('برای این ارائه‌دهنده پورتی ثبت نشده است')
+    selected=_selected_paths(db,provider,data.get('ports'))
     existing_id=data.get('existing_account_id')
-    if existing_id is not None:
-        account=known_account(db,existing_id)
-        if db.execute('SELECT 1 FROM provider_wallet_links WHERE account_id=?',
-                      (existing_id,)).fetchone():
-            raise ValueError('این کیف پول به ارائه‌دهنده دیگری اختصاص دارد')
-        incompatible=db.execute('''SELECT b.node_id,b.port FROM supplier_ports b
-              LEFT JOIN metadata m ON m.node_id=b.node_id AND m.port=b.port
-              WHERE b.account_id=? AND COALESCE(m.provider,'')!=? LIMIT 1''',
-              (existing_id,provider)).fetchone()
-        if incompatible:raise ValueError('این حساب پورت متعلق به ارائه‌دهنده دیگری دارد')
-        account_id=existing_id
+    editing_id=data.get('account_id')
+    if existing_id is not None and editing_id is not None:
+        raise ValueError('فقط یک نوع عملیات حساب مجاز است')
+    if existing_id is not None or editing_id is not None:
+        account_id=existing_id if existing_id is not None else editing_id
+        account=known_account(db,account_id)
+        old_link=db.execute('SELECT provider FROM provider_wallet_links WHERE account_id=?',
+                            (account_id,)).fetchone()
+        if old_link and old_link['provider']!=provider:
+            raise ValueError('حساب به ارائه‌دهنده دیگری تعلق دارد')
+        if not old_link:
+            incompatible=db.execute('''SELECT 1 FROM supplier_ports b
+                LEFT JOIN metadata m ON m.node_id=b.node_id AND m.port=b.port
+                WHERE b.account_id=? AND COALESCE(m.provider,'')!=? LIMIT 1''',
+                (account_id,provider)).fetchone()
+            if incompatible:raise ValueError('حساب قدیمی پورت متعلق به ارائه‌دهنده دیگری دارد')
     else:
         account_id=create_account(db,{
             'kind':data.get('kind'),
-            'title':provider,
+            'title':data.get('title') or provider,
             'bot_handle':data.get('bot_handle',''),
             'opening_amount':data.get('opening_amount'),
             'notes':data.get('notes','')})
-    # Preflight all conflicts BEFORE inserting any links, in a single transaction.
-    for row in paths:
-        existing=db.execute('SELECT account_id FROM supplier_ports WHERE node_id=? AND port=?',
-                            (row['node_id'],row['port'])).fetchone()
-        if existing and existing['account_id']!=account_id:
-            raise ValueError('پورت '+str(row['port'])+' قبلاً به حساب دیگری متصل است')
-    db.execute('INSERT INTO provider_wallet_links(provider,account_id) VALUES(?,?)',
+    # Prevent transfer from unlinked manually-created accounts; link those first.
+    for p in selected:
+        active=_current_port(db,p['node_id'],p['port'])
+        if active and active['account_id']!=account_id:
+            link=db.execute('SELECT provider FROM provider_wallet_links WHERE account_id=?',
+                            (active['account_id'],)).fetchone()
+            if not link or link['provider']!=provider:
+                raise ValueError('پورت به کیف پول دیگری که متعلق به این ارائه‌دهنده نیست متصل است')
+    db.execute('INSERT OR IGNORE INTO provider_wallet_links(provider,account_id) VALUES(?,?)',
                (provider,account_id))
-    for row in paths:
-        sync_provider_port(db,provider,row['node_id'],row['port'],
-                           row['bill_direction'],row['price_per_gb'])
+    _apply_ports(db,account_id,provider,selected,utc_now())
     return account_id
 
 def add_credit(db,data):
@@ -201,6 +249,8 @@ def _estimate(db,account,bindings,until=None):
             params=[row['node_id'],row['port'],lower]
             if upper:
                 filters.append('collected_at<?');params.append(upper)
+            if row['ended_at']:
+                filters.append('collected_at<?');params.append(row['ended_at'])
             if until:
                 filters.append('collected_at<=?');params.append(until)
             down,up=db.execute('''SELECT COALESCE(SUM(delta_down),0),
@@ -232,6 +282,7 @@ def wallet_report(db):
         association=db.execute('SELECT provider FROM provider_wallet_links WHERE account_id=?',
                                (a['id'],)).fetchone()
         account['provider']=association['provider'] if association else ''
+        account['active_port_count']=db.execute("SELECT COUNT(*) FROM supplier_ports WHERE account_id=? AND ended_at=''",(a['id'],)).fetchone()[0]
         bindings=[dict(r) for r in db.execute('''SELECT b.*,p.node_name
            FROM supplier_ports b LEFT JOIN port_state p ON p.node_id=b.node_id AND p.port=b.port
            WHERE b.account_id=? ORDER BY b.node_id,b.port''',(a['id'],))]
