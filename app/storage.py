@@ -110,6 +110,10 @@ CREATE TABLE IF NOT EXISTS supplier_provider_links (
  default_direction TEXT NOT NULL CHECK(default_direction IN ('downlink','uplink','both')),
  default_rate_rial_per_gb INTEGER NOT NULL DEFAULT 0 CHECK(default_rate_rial_per_gb>=0)
 );
+CREATE TABLE IF NOT EXISTS provider_wallet_links (
+ provider TEXT PRIMARY KEY NOT NULL CHECK(length(provider)>0),
+ account_id INTEGER UNIQUE NOT NULL REFERENCES supplier_accounts(id)
+);
 CREATE TABLE IF NOT EXISTS supplier_checks (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  account_id INTEGER NOT NULL REFERENCES supplier_accounts(id),
