@@ -75,6 +75,7 @@ with sqlite3.connect(str(source),timeout=30) as db:
     db.execute('DELETE FROM fixed_expenses')
     db.execute('DELETE FROM supplier_port_terms')
     db.execute('DELETE FROM provider_wallet_links')
+    db.execute('DELETE FROM supplier_reconciliations')
     db.execute('DELETE FROM supplier_checks')
     db.execute('DELETE FROM supplier_credits')
     db.execute('DELETE FROM supplier_ports')
