@@ -7,6 +7,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
 import web
 from storage import connect, insert_poll
+from units import BYTES_PER_GIB as GiB
 
 
 class CurrentRateTests(unittest.TestCase):
@@ -45,13 +46,13 @@ class CurrentRateTests(unittest.TestCase):
                 self.assertEqual(port['down'], 3_000_000_000)
                 self.assertEqual(port['up'], 300_000_000)
                 self.assertEqual(port['billed'], 3_300_000_000)
-                self.assertAlmostEqual(port['cost'], 2805.0)
-                self.assertAlmostEqual(port['historical_cost'], 936870.0)
-                self.assertAlmostEqual(data['total']['cost'], 2805.0)
-                self.assertAlmostEqual(data['total']['historical_cost'], 936870.0)
-                self.assertAlmostEqual(data['providers']['Provider']['cost'], 2805.0)
-                self.assertAlmostEqual(data['daily'][0]['cost'], 2805.0)
-                self.assertAlmostEqual(data['daily'][0]['historical_cost'], 936870.0)
+                self.assertAlmostEqual(port['cost'], 2805.0*1e9/GiB)
+                self.assertAlmostEqual(port['historical_cost'], 936870.0*1e9/GiB)
+                self.assertAlmostEqual(data['total']['cost'], 2805.0*1e9/GiB)
+                self.assertAlmostEqual(data['total']['historical_cost'], 936870.0*1e9/GiB)
+                self.assertAlmostEqual(data['providers']['Provider']['cost'], 2805.0*1e9/GiB)
+                self.assertAlmostEqual(data['daily'][0]['cost'], 2805.0*1e9/GiB)
+                self.assertAlmostEqual(data['daily'][0]['historical_cost'], 936870.0*1e9/GiB)
 
                 # Changing the billed direction must also recalculate the
                 # presentation without ever rewriting raw historical samples.
@@ -59,12 +60,12 @@ class CurrentRateTests(unittest.TestCase):
                     with db:
                         db.execute("UPDATE metadata SET bill_direction='downlink' WHERE node_id=3 AND port=8443")
                 data = web.dashboard(params)
-                self.assertAlmostEqual(data['total']['cost'], 2550.0)
-                self.assertAlmostEqual(data['daily'][0]['cost'], 2550.0)
-                self.assertAlmostEqual(data['total']['historical_cost'], 936870.0)
+                self.assertAlmostEqual(data['total']['cost'], 2550.0*1e9/GiB)
+                self.assertAlmostEqual(data['daily'][0]['cost'], 2550.0*1e9/GiB)
+                self.assertAlmostEqual(data['total']['historical_cost'], 936870.0*1e9/GiB)
                 with connect(database) as db:
                     historic = db.execute("SELECT SUM(cost) FROM samples WHERE node_id=3 AND port=8443").fetchone()[0]
-                self.assertAlmostEqual(historic, 936870.0)
+                self.assertAlmostEqual(historic, 936870.0*1e9/GiB)
 
                 # Billing-since only changes the reporting scope (not stored records).
                 with connect(database) as db:
@@ -74,8 +75,8 @@ class CurrentRateTests(unittest.TestCase):
                             WHERE node_id=3 AND port=8443""")
                 data = web.dashboard(params)
                 self.assertEqual(data['ports'][0]['down'], 2_000_000_000)
-                self.assertAlmostEqual(data['total']['cost'], 1700.0)
-                self.assertAlmostEqual(data['total']['historical_cost'], 1870.0)
+                self.assertAlmostEqual(data['total']['cost'], 1700.0*1e9/GiB)
+                self.assertAlmostEqual(data['total']['historical_cost'], 1870.0*1e9/GiB)
             finally:
                 web.CFG = previous
 
