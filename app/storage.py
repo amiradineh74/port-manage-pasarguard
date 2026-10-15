@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS supplier_ports (
  started_at TEXT NOT NULL,
  direction TEXT NOT NULL CHECK(direction IN ('downlink','uplink','both')),
  rate_rial_per_gb INTEGER NOT NULL DEFAULT 0 CHECK(rate_rial_per_gb>=0),
- UNIQUE(node_id,port)
+ ended_at TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_supplier_ports_account ON supplier_ports(account_id);
 
@@ -116,8 +116,8 @@ CREATE TABLE IF NOT EXISTS supplier_credits (
 CREATE INDEX IF NOT EXISTS idx_supplier_credits_account ON supplier_credits(account_id);
 
 CREATE TABLE IF NOT EXISTS provider_wallet_links (
- provider TEXT PRIMARY KEY NOT NULL CHECK(length(provider)>0),
- account_id INTEGER UNIQUE NOT NULL REFERENCES supplier_accounts(id)
+ provider TEXT NOT NULL CHECK(length(provider)>0),
+ account_id INTEGER PRIMARY KEY REFERENCES supplier_accounts(id)
 );
 CREATE TABLE IF NOT EXISTS supplier_checks (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,6 +133,49 @@ CREATE INDEX IF NOT EXISTS idx_supplier_checks_account ON supplier_checks(accoun
 
 """
 
+def migrate_supplier_wallets(db):
+    """Idempotent upgrade of supplier tables; old port IDs and history remain."""
+    cols={r['name'] for r in db.execute('PRAGMA table_info(supplier_ports)')}
+    old_link=db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='provider_wallet_links'").fetchone()
+    old_provider=bool(old_link and 'PROVIDER TEXT PRIMARY KEY' in old_link['sql'].upper())
+    if 'ended_at' not in cols or old_provider:
+        db.execute('BEGIN IMMEDIATE')
+        try:
+            if 'ended_at' not in cols:
+                db.execute("""CREATE TABLE supplier_ports_upgrade(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    account_id INTEGER NOT NULL REFERENCES supplier_accounts(id),
+                    node_id INTEGER NOT NULL,
+                    port INTEGER NOT NULL CHECK(port BETWEEN 1 AND 65535),
+                    started_at TEXT NOT NULL,
+                    direction TEXT NOT NULL CHECK(direction IN ('downlink','uplink','both')),
+                    rate_rial_per_gb INTEGER NOT NULL DEFAULT 0 CHECK(rate_rial_per_gb>=0),
+                    ended_at TEXT NOT NULL DEFAULT ''
+                )""")
+                db.execute("""INSERT INTO supplier_ports_upgrade
+                    (id,account_id,node_id,port,started_at,direction,rate_rial_per_gb)
+                    SELECT id,account_id,node_id,port,started_at,direction,rate_rial_per_gb
+                    FROM supplier_ports""")
+                db.execute('DROP TABLE supplier_ports')
+                db.execute('ALTER TABLE supplier_ports_upgrade RENAME TO supplier_ports')
+            if old_provider:
+                db.execute("""CREATE TABLE provider_wallet_links_upgrade(
+                    provider TEXT NOT NULL CHECK(length(provider)>0),
+                    account_id INTEGER PRIMARY KEY REFERENCES supplier_accounts(id)
+                )""")
+                db.execute("""INSERT INTO provider_wallet_links_upgrade(provider,account_id)
+                    SELECT provider,account_id FROM provider_wallet_links""")
+                db.execute('DROP TABLE provider_wallet_links')
+                db.execute('ALTER TABLE provider_wallet_links_upgrade RENAME TO provider_wallet_links')
+            db.commit()
+        except BaseException:
+            db.rollback()
+            raise
+    db.execute('CREATE INDEX IF NOT EXISTS idx_supplier_ports_account ON supplier_ports(account_id)')
+    db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS uq_supplier_port_current
+       ON supplier_ports(node_id,port) WHERE ended_at=''""")
+    db.execute('CREATE INDEX IF NOT EXISTS idx_provider_wallet_links_provider ON provider_wallet_links(provider)')
+
 def connect(db_file):
     db_file = Path(db_file)
     db_file.parent.mkdir(parents=True, exist_ok=True)
@@ -141,6 +184,7 @@ def connect(db_file):
     db.execute('PRAGMA busy_timeout=10000')
     db.execute('PRAGMA journal_mode=WAL')
     db.executescript(DDL)
+    migrate_supplier_wallets(db)
     return db
 
 
