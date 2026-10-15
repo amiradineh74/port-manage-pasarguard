@@ -3,10 +3,12 @@
 A supplier account starts at a manually recorded balance checkpoint. Port bindings
 start when saved; only subsequently collected Xray deltas are counted. Provider
 reported balances are comparison snapshots, never automatically treated as credits.
-All money is integer IRR; all traffic is decimal GB (1 GB = 1e9 bytes).
+All money is integer IRR. Volume and rate units use the single installation-wide
+GB/GiB choice; historical rate terms retain their original divisor for audit.
 """
 from datetime import datetime,timezone
 from decimal import Decimal, ROUND_HALF_UP
+from units import selected_bytes_per_unit
 
 MAX_AMOUNT=10**15
 DIRECTIONS=('downlink','uplink','both')
@@ -69,9 +71,10 @@ def attach_port(db,data):
     if direction not in DIRECTIONS:raise ValueError('جهت ترافیک معتبر نیست')
     rate=require_int(data.get('rate_rial_per_gb',0),'تعرفه ریال بر گیگ',0,10**12)
     if account['kind']=='volume' and rate:raise ValueError('حساب حجمی نیاز به نرخ پولی ندارد')
-    db.execute('''INSERT INTO supplier_ports(account_id,node_id,port,started_at,direction,rate_rial_per_gb)
-                  VALUES(?,?,?,?,?,?)''',
-               (account['id'],node,port,utc_now(),direction,rate))
+    db.execute('''INSERT INTO supplier_ports
+        (account_id,node_id,port,started_at,direction,rate_rial_per_gb,bytes_per_unit)
+        VALUES(?,?,?,?,?,?,?)''',
+        (account['id'],node,port,utc_now(),direction,rate,selected_bytes_per_unit(db)))
     return db.execute('SELECT last_insert_rowid()').fetchone()[0]
 
 def provider_paths(db,provider):
@@ -96,16 +99,18 @@ def sync_provider_port(db,provider,node_id,port,direction,rate_toman):
     if direction not in DIRECTIONS:raise ValueError('جهت ترافیک نامعتبر است')
     rate=0 if account['kind']=='volume' else int((
         Decimal(str(rate_toman))*Decimal(10)).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
-    latest=db.execute('''SELECT direction,rate_rial_per_gb FROM supplier_port_terms
+    latest=db.execute('''SELECT direction,rate_rial_per_gb,bytes_per_unit FROM supplier_port_terms
        WHERE binding_id=? ORDER BY started_at DESC,id DESC LIMIT 1''',(row['id'],)).fetchone()
     previous_direction=latest['direction'] if latest else row['direction']
     previous_rate=latest['rate_rial_per_gb'] if latest else row['rate_rial_per_gb']
-    if previous_direction!=direction or previous_rate!=rate:
+    previous_unit=latest['bytes_per_unit'] if latest else row['bytes_per_unit']
+    if previous_direction!=direction or previous_rate!=rate or previous_unit!=selected_bytes_per_unit(db):
         db.execute('''INSERT INTO supplier_port_terms
-          (binding_id,started_at,direction,rate_rial_per_gb) VALUES(?,?,?,?)
+          (binding_id,started_at,direction,rate_rial_per_gb,bytes_per_unit) VALUES(?,?,?,?,?)
           ON CONFLICT(binding_id,started_at) DO UPDATE SET
-             direction=excluded.direction,rate_rial_per_gb=excluded.rate_rial_per_gb''',
-          (row['id'],utc_now(),direction,rate))
+             direction=excluded.direction,rate_rial_per_gb=excluded.rate_rial_per_gb,
+             bytes_per_unit=excluded.bytes_per_unit''',
+          (row['id'],utc_now(),direction,rate,selected_bytes_per_unit(db)))
 
 def _selected_paths(db,provider,ports):
     if not isinstance(ports,list) or len(ports)>200:
@@ -152,8 +157,8 @@ def _apply_ports(db,account_id,provider,selected,now,allow_transfer=False):
             Decimal(str(p['price_per_gb']))*Decimal(10)).quantize(
                 Decimal('1'),rounding=ROUND_HALF_UP))
         db.execute('''INSERT INTO supplier_ports
-            (account_id,node_id,port,started_at,direction,rate_rial_per_gb)
-            VALUES(?,?,?,?,?,?)''',(account_id,p['node_id'],p['port'],now,direction,rate))
+            (account_id,node_id,port,started_at,direction,rate_rial_per_gb,bytes_per_unit)
+            VALUES(?,?,?,?,?,?,?)''',(account_id,p['node_id'],p['port'],now,direction,rate,selected_bytes_per_unit(db)))
 
 def assign_provider_wallet(db,data):
     """Create/link/edit an independent account and explicitly choose its ports.
@@ -253,8 +258,9 @@ def _estimate(db,account,bindings,until=None):
     per_port=[]
     for row in bindings:
         terms=[{'started_at':row['started_at'],
-                'direction':row['direction'],'rate_rial_per_gb':row['rate_rial_per_gb']}]
-        history=db.execute('''SELECT started_at,direction,rate_rial_per_gb
+                'direction':row['direction'],'rate_rial_per_gb':row['rate_rial_per_gb'],
+                'bytes_per_unit':row['bytes_per_unit']}]
+        history=db.execute('''SELECT started_at,direction,rate_rial_per_gb,bytes_per_unit
             FROM supplier_port_terms WHERE binding_id=? ORDER BY started_at,id''',
             (row['id'],)).fetchall()
         for term in history:
@@ -278,7 +284,7 @@ def _estimate(db,account,bindings,until=None):
                 ' AND '.join(filters),params).fetchone()
             down,up=int(down),int(up)
             billed={'downlink':down,'uplink':up,'both':down+up}[term['direction']]
-            charge=int((Decimal(billed)*Decimal(term['rate_rial_per_gb'])/Decimal(10**9))
+            charge=int((Decimal(billed)*Decimal(term['rate_rial_per_gb'])/Decimal(term['bytes_per_unit']))
                        .quantize(Decimal('1'),rounding=ROUND_HALF_UP))
             port_down+=down;port_up+=up;port_bill+=billed;port_charge+=charge
         spent_bytes+=port_bill;spent_rial+=port_charge

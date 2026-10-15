@@ -71,7 +71,7 @@ with sqlite3.connect(str(source),timeout=30) as db:
         raise SystemExit('Historical samples missing since backup. Aborted.')
     db.execute('UPDATE samples SET bill_bytes=0,rate_snapshot=0,cost=0')
     db.execute('DELETE FROM metadata')
-    db.execute('DELETE FROM settings')
+    db.execute("DELETE FROM settings WHERE key!='traffic_unit'")
     db.execute('DELETE FROM fixed_expenses')
     db.execute('DELETE FROM supplier_port_terms')
     db.execute('DELETE FROM provider_wallet_links')

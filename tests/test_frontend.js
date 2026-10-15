@@ -32,6 +32,8 @@ assert.ok(dashboardTemplate.includes('id="main-nav"'));
 assert.ok(dashboardTemplate.includes('id="nav-toggle"'));
 assert.ok(dashboardTemplate.includes('id="nav-backdrop"'));
 assert.ok(dashboardTemplate.includes('id="provider-report-dialog"'));
+assert.ok(dashboardTemplate.includes('id="rate-volume-unit"'));
+assert.ok(!dashboardTemplate.includes('تعرفه هر GB (یک میلیارد بایت)'))
 assert.ok(!dashboardTemplate.includes('id="ports-section"'));
 for(const id of ['provider-wallet-dialog','provider-wallet-name','provider-wallet-opening','wallet-credit-dialog','wallet-reported-dialog']){
  assert.ok(dashboardTemplate.includes('id="'+id+'"'),'missing supplier UI: '+id);
@@ -69,7 +71,21 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  assert.equal(vm.runInContext("walletInputNumber('provider-wallet-opening','money')",ctx),2437750);
  vm.runInContext("state.currency='ریال'",ctx);
  elem('provider-wallet-opening').value='9.5';
+ assert.equal(vm.runInContext("walletInputNumber('provider-wallet-opening','volume')",ctx),Math.round(9.5*1024**3));
+ // All new traffic display and wallet accounting use IEC GiB.
+ assert.equal(vm.runInContext('traffic(1073741824)',ctx),'۱ GiB');
+ assert.equal(vm.runInContext("walletAmount(1073741824,'volume')",ctx),'۱ GiB');
+ vm.runInContext("state.traffic_unit='GB'",ctx);
+ assert.equal(vm.runInContext('traffic(1000000000)',ctx),'۱ GB');
+ vm.runInContext('openEdit(3,8443)',ctx);
+ assert.equal(elem('rate-volume-unit').textContent,'GB');
+ assert.equal(vm.runInContext("walletAmount(1000000000,'volume')",ctx),'۱ GB');
+ elem('provider-wallet-opening').value='9.5';
  assert.equal(vm.runInContext("walletInputNumber('provider-wallet-opening','volume')",ctx),9500000000);
+ vm.runInContext("state.traffic_unit='GiB'",ctx);
+ vm.runInContext('openEdit(3,8443)',ctx);
+ assert.equal(elem('rate-volume-unit').textContent,'GiB');
+
  assert.throws(()=>vm.runInContext("walletInputNumber('provider-wallet-opening','money')",ctx));
  vm.runInContext("state.wallets=[{id:11,provider:'A',title:'A',kind:'money',bot_handle:'@sample',estimated_balance:2422750,opening_rial:2437750,opening_bytes:0,credited:0,spent_rial:15000,used_bytes:1250000000,reported_balance:null,started_at:'2026-10-14T00:00:00+00:00',ports:[],credit_history:[],check_history:[]}];renderProviderPanels()",ctx);
  assert.ok(elem('providers').innerHTML.includes('۲٬۴۲۲٬۷۵۰'));
@@ -110,6 +126,8 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  elem('chart-scale').value='monthly';
  vm.runInContext('renderProviderPanels()',ctx);
  assert.ok(elem('chart').innerHTML.includes('<rect'));
+ assert.ok(elem('chart').innerHTML.includes(' GiB'));
+ assert.ok(elem('down').textContent.includes('GiB'));
  assert.ok(elem('node-legend').innerHTML.includes('Turkey'));
  assert.ok(elem('node-legend').innerHTML.includes('Germany'));
  assert.ok(elem('cost-chart').innerHTML.includes('نمودار ستونی'));

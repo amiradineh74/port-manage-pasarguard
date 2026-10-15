@@ -1,10 +1,11 @@
-"""Checkpoints, money-vs-GB units, supplier reports and historical volume safety."""
+"""Checkpoints, money-vs-GiB units, supplier reports and historical volume safety."""
 import sys, tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'app'))
 from storage import connect,insert_poll
 import supplier_wallets as wallets
+from units import BYTES_PER_GIB as GiB
 
 class WalletTests(unittest.TestCase):
     def setUp(self):
@@ -12,7 +13,7 @@ class WalletTests(unittest.TestCase):
         self.db=connect(Path(self.folder.name)/'traffic.sqlite3')
         self.settings={'exclude_ports':[],'default_bill_direction':'both','default_price_per_gb':0}
         self.poll(0,0,'2026-10-14T00:00:00+00:00')
-        self.poll(3000000000,500000000,'2026-10-14T01:00:00+00:00')
+        self.poll(3*GiB,GiB//2,'2026-10-14T01:00:00+00:00')
     def tearDown(self):
         self.db.close();self.folder.cleanup()
     def poll(self,down,up,when):
@@ -27,10 +28,10 @@ class WalletTests(unittest.TestCase):
                 'direction':'both','rate_rial_per_gb':12000})
         self.db.commit()
         self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],2437750)
-        self.poll(4000000000,750000000,'2026-10-14T01:02:00+00:00')
+        self.poll(4*GiB,(3*GiB)//4,'2026-10-14T01:02:00+00:00')
         self.db.commit()
         a=wallets.wallet_report(self.db)[0]
-        self.assertEqual(a['used_bytes'],1250000000)
+        self.assertEqual(a['used_bytes'],(5*GiB)//4)
         self.assertEqual(a['spent_rial'],15000)
         self.assertEqual(a['estimated_balance'],2422750)
         # A payment included in the opening 243775 Toman must NOT be entered again.
@@ -41,14 +42,14 @@ class WalletTests(unittest.TestCase):
         a=wallets.wallet_report(self.db)[0]
         self.assertEqual(a['estimated_balance'],4420000)
         self.assertEqual(a['comparison_gap'],-2750)
-        self.poll(5000000000,750000000,'2026-10-14T01:04:00+00:00')
+        self.poll(5*GiB,(3*GiB)//4,'2026-10-14T01:04:00+00:00')
         self.db.commit()
         # Past comparison is pegged to reported-at, not today's new traffic.
         a=wallets.wallet_report(self.db)[0]
         self.assertEqual(a['comparison_gap'],-2750)
         self.assertEqual(a['estimated_balance'],4408000)
         # Volume historical records are still intact.
-        self.assertEqual(self.db.execute('SELECT SUM(delta_down) FROM samples').fetchone()[0],5000000000)
+        self.assertEqual(self.db.execute('SELECT SUM(delta_down) FROM samples').fetchone()[0],5*GiB)
     def test_reconcile_multiple_times_money_and_signed_monthly_totals(self):
         with patch.object(wallets,'utc_now',return_value='2026-10-14T01:01:00+00:00'):
             aid=wallets.create_account(self.db,{'kind':'money','title':'Wallet',
@@ -73,24 +74,24 @@ class WalletTests(unittest.TestCase):
         self.assertEqual(len(report['reconciliation_history']),3)
         self.assertEqual(report['reconciliation_history'][0]['note'],'')
         self.assertEqual(report['reconciliation_history'][2]['note'],'First bot comparison')
-        self.assertEqual(self.db.execute('SELECT SUM(delta_down) FROM samples').fetchone()[0],3000000000)
+        self.assertEqual(self.db.execute('SELECT SUM(delta_down) FROM samples').fetchone()[0],3*GiB)
 
     def test_reconcile_quota_and_future_usage_keeps_correction(self):
         with patch.object(wallets,'utc_now',return_value='2026-10-14T01:01:00+00:00'):
             aid=wallets.create_account(self.db,{'kind':'volume','title':'Quota',
-                'opening_amount':230000000000})
+                'opening_amount':230*GiB})
             wallets.attach_port(self.db,{'account_id':aid,'node_id':7,'port':47307,
                 'direction':'downlink','rate_rial_per_gb':0})
         with patch.object(wallets,'utc_now',return_value='2026-10-14T01:01:30+00:00'):
             receipt=wallets.reconcile_balance(self.db,{'account_id':aid,
-                  'amount':220000000000})
-        self.assertEqual(receipt['adjustment'],-10000000000)
-        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],220000000000)
-        self.poll(5000000000,500000000,'2026-10-14T01:02:00+00:00')
-        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],218000000000)
+                  'amount':220*GiB})
+        self.assertEqual(receipt['adjustment'],-10*GiB)
+        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],220*GiB)
+        self.poll(5*GiB,GiB//2,'2026-10-14T01:02:00+00:00')
+        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],218*GiB)
         with patch.object(wallets,'utc_now',return_value='2026-10-14T01:03:00+00:00'):
-            wallets.add_credit(self.db,{'account_id':aid,'amount':10000000000})
-        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],228000000000)
+            wallets.add_credit(self.db,{'account_id':aid,'amount':10*GiB})
+        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],228*GiB)
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM supplier_credits').fetchone()[0],1)
 
     def test_provider_uses_existing_metadata_and_legacy_balances(self):
@@ -108,7 +109,7 @@ class WalletTests(unittest.TestCase):
         self.assertEqual(bindings[0]['direction'],'both')
         self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],2437750)
         # Earlier consumption is not charged to the new checkpoint.
-        self.poll(4000000000,750000000,'2026-10-14T01:02:00+00:00')
+        self.poll(4*GiB,(3*GiB)//4,'2026-10-14T01:02:00+00:00')
         a=wallets.wallet_report(self.db)[0]
         self.assertEqual(a['spent_rial'],15000)
         self.assertEqual(a['provider'],'SampleSupplier')
@@ -124,11 +125,11 @@ class WalletTests(unittest.TestCase):
         with patch.object(wallets,'utc_now',return_value='2026-10-14T01:01:00+00:00'):
             wallets.assign_provider_wallet(self.db,{
                 'provider':'SampleSupplier','ports':[{'node_id':7,'port':47307}],'kind':'money','opening_amount':2437750})
-        self.poll(4000000000,750000000,'2026-10-14T01:02:00+00:00')
+        self.poll(4*GiB,(3*GiB)//4,'2026-10-14T01:02:00+00:00')
         self.assertEqual(wallets.wallet_report(self.db)[0]['spent_rial'],15000)
         with patch.object(wallets,'utc_now',return_value='2026-10-14T01:03:00+00:00'):
             wallets.sync_provider_port(self.db,'SampleSupplier',7,47307,'both',1500)
-        self.poll(5000000000,750000000,'2026-10-14T01:04:00+00:00')
+        self.poll(5*GiB,(3*GiB)//4,'2026-10-14T01:04:00+00:00')
         self.assertEqual(wallets.wallet_report(self.db)[0]['spent_rial'],30000)
         self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],2407750)
         terms=self.db.execute('SELECT COUNT(*) FROM supplier_port_terms').fetchone()[0]
@@ -160,7 +161,7 @@ class WalletTests(unittest.TestCase):
             VALUES(7,47307,'SampleSupplier',1200,'both')""")
         with patch.object(wallets,'utc_now',return_value='2026-10-14T01:01:00+00:00'):
             account_id=wallets.assign_provider_wallet(self.db,{
-                'provider':'SampleSupplier','ports':[{'node_id':7,'port':47307}],'kind':'volume','opening_amount':50000000000})
+                'provider':'SampleSupplier','ports':[{'node_id':7,'port':47307}],'kind':'volume','opening_amount':50*GiB})
         self.db.execute("""INSERT INTO port_state(node_id,port,node_name,node_address,tag,last_seen)
           VALUES(7,47308,'Germany','192.0.2.7','new-tag','2026-10-14T01:05:00+00:00')""")
         self.db.execute("""INSERT INTO metadata(node_id,port,provider,price_per_gb,bill_direction)
@@ -178,12 +179,12 @@ class WalletTests(unittest.TestCase):
             'SELECT COUNT(*) FROM supplier_ports WHERE account_id=? AND ended_at=?',
             (account_id,'')).fetchone()[0],2)
         # Fresh binding starts at its own checkpoint and never back-charges old samples.
-        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],50000000000)
+        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],50*GiB)
 
     def test_port_quota_and_duplicate_binding(self):
         with patch.object(wallets,'utc_now',return_value='2026-10-14T01:01:00+00:00'):
             volume=wallets.create_account(self.db,{'kind':'volume','title':'Quota',
-                'opening_amount':100000000000})
+                'opening_amount':100*GiB})
             wallets.attach_port(self.db,{'account_id':volume,'node_id':7,
                 'port':47307,'direction':'downlink','rate_rial_per_gb':0})
             with self.assertRaises(ValueError):
@@ -192,14 +193,14 @@ class WalletTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 wallets.attach_port(self.db,{'account_id':volume,'node_id':7,'port':9999,
                     'direction':'both','rate_rial_per_gb':0})
-        self.poll(15500000000,800000000,'2026-10-14T01:02:00+00:00')
+        self.poll((31*GiB)//2,(4*GiB)//5,'2026-10-14T01:02:00+00:00')
         with patch.object(wallets,'utc_now',return_value='2026-10-14T01:03:00+00:00'):
-            wallets.add_credit(self.db,{'account_id':volume,'amount':20000000000})
-            wallets.report_balance(self.db,{'account_id':volume,'amount':108000000000})
+            wallets.add_credit(self.db,{'account_id':volume,'amount':20*GiB})
+            wallets.report_balance(self.db,{'account_id':volume,'amount':108*GiB})
         self.db.commit()
         a=wallets.wallet_report(self.db)[0]
-        self.assertEqual(a['estimated_balance'],108000000000)
-        self.assertEqual(a['comparison_gap'],500000000)
+        self.assertEqual(a['estimated_balance'],108*GiB)
+        self.assertEqual(a['comparison_gap'],GiB//2)
         with self.assertRaises(ValueError):
             wallets.add_credit(self.db,{'account_id':volume,'amount':0})
         with self.assertRaises(ValueError):

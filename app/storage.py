@@ -1,6 +1,8 @@
 """Own SQLite database. No writes whatsoever to the PasarGuard database."""
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
+from units import BYTES_PER_GIB, bytes_per_unit, check_unit, selected_unit, selected_bytes_per_unit
 
 DDL = """
 CREATE TABLE IF NOT EXISTS port_state (
@@ -41,6 +43,7 @@ CREATE TABLE IF NOT EXISTS samples (
   bill_bytes INTEGER NOT NULL,
   rate_snapshot REAL NOT NULL,
   cost REAL NOT NULL,
+  rate_unit TEXT NOT NULL DEFAULT 'GiB',
   event TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_samples_at ON samples(collected_at);
@@ -92,6 +95,7 @@ CREATE TABLE IF NOT EXISTS supplier_ports (
  started_at TEXT NOT NULL,
  direction TEXT NOT NULL CHECK(direction IN ('downlink','uplink','both')),
  rate_rial_per_gb INTEGER NOT NULL DEFAULT 0 CHECK(rate_rial_per_gb>=0),
+ bytes_per_unit INTEGER NOT NULL DEFAULT 1073741824,
  ended_at TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_supplier_ports_account ON supplier_ports(account_id);
@@ -102,6 +106,7 @@ CREATE TABLE IF NOT EXISTS supplier_port_terms (
  started_at TEXT NOT NULL,
  direction TEXT NOT NULL CHECK(direction IN ('downlink','uplink','both')),
  rate_rial_per_gb INTEGER NOT NULL CHECK(rate_rial_per_gb>=0),
+ bytes_per_unit INTEGER NOT NULL DEFAULT 1073741824,
  UNIQUE(binding_id,started_at)
 );
 CREATE INDEX IF NOT EXISTS idx_supplier_terms_binding ON supplier_port_terms(binding_id,started_at);
@@ -188,16 +193,67 @@ def migrate_supplier_wallets(db):
        ON supplier_ports(node_id,port) WHERE ended_at=''""")
     db.execute('CREATE INDEX IF NOT EXISTS idx_provider_wallet_links_provider ON provider_wallet_links(provider)')
 
-def connect(db_file):
+
+def migrate_traffic_unit(db, preferred_unit=None):
+    """Freeze a single global accounting unit in this independent monitor DB.
+
+    Legacy history always keeps its original decimal-GB pricing. An existing
+    database must not be silently converted to binary units on software update.
+    A different desired unit requires a separate/new monitor database.
+    """
+    if preferred_unit is not None:
+        check_unit(preferred_unit)
+    current=db.execute("SELECT value FROM settings WHERE key='traffic_unit'").fetchone()
+    if current:
+        locked=check_unit(current[0])
+        if preferred_unit is not None and locked != preferred_unit:
+            raise ValueError('Traffic unit is locked to '+locked+
+                '. Use a new independent monitor database to select '+preferred_unit)
+    else:
+        sample_cols={row['name'] for row in db.execute('PRAGMA table_info(samples)')}
+        port_cols={row['name'] for row in db.execute('PRAGMA table_info(supplier_ports)')}
+        old_schema=('rate_unit' not in sample_cols or 'bytes_per_unit' not in port_cols)
+        has_history=bool(db.execute('SELECT 1 FROM samples LIMIT 1').fetchone() or
+                         db.execute('SELECT 1 FROM supplier_accounts LIMIT 1').fetchone())
+        if old_schema and has_history:
+            locked='GB'
+            if preferred_unit not in (None,'GB'):
+                raise ValueError('Existing decimal-GB monitor data found. '+
+                    'Create a new independent monitor DB to select GiB.')
+        else:
+            locked=preferred_unit or 'GiB'
+
+    # Schema maintenance touches ONLY the monitor SQLite.
+    cols={row['name'] for row in db.execute('PRAGMA table_info(samples)')}
+    if 'rate_unit' not in cols:
+        db.execute("ALTER TABLE samples ADD COLUMN rate_unit TEXT NOT NULL DEFAULT 'GB'")
+    cols={row['name'] for row in db.execute('PRAGMA table_info(supplier_ports)')}
+    if 'bytes_per_unit' not in cols:
+        db.execute("ALTER TABLE supplier_ports ADD COLUMN bytes_per_unit INTEGER NOT NULL DEFAULT 1000000000")
+    cols={row['name'] for row in db.execute('PRAGMA table_info(supplier_port_terms)')}
+    if 'bytes_per_unit' not in cols:
+        db.execute("ALTER TABLE supplier_port_terms ADD COLUMN bytes_per_unit INTEGER NOT NULL DEFAULT 1000000000")
+
+    if not current:
+        db.execute("INSERT INTO settings(key,value) VALUES('traffic_unit',?)",(locked,))
+        db.commit()
+
+
+def connect(db_file, traffic_unit=None):
     db_file = Path(db_file)
     db_file.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(str(db_file), timeout=10)
     db.row_factory = sqlite3.Row
-    db.execute('PRAGMA busy_timeout=10000')
-    db.execute('PRAGMA journal_mode=WAL')
-    db.executescript(DDL)
-    migrate_supplier_wallets(db)
-    return db
+    try:
+        db.execute('PRAGMA busy_timeout=10000')
+        db.execute('PRAGMA journal_mode=WAL')
+        db.executescript(DDL)
+        migrate_supplier_wallets(db)
+        migrate_traffic_unit(db, traffic_unit)
+        return db
+    except BaseException:
+        db.close()
+        raise
 
 
 def delta(previous, current, tag_changed=False):
@@ -233,7 +289,7 @@ def insert_poll(db, payload, timestamp, settings):
                 direction = meta['bill_direction'] if meta else settings.get('default_bill_direction','downlink')
                 rate = float(meta['price_per_gb']) if meta else float(settings.get('default_price_per_gb',0))
                 bill = {'downlink': dd, 'uplink': du, 'both': dd + du}[direction]
-                cost = bill * rate / 1_000_000_000
+                cost = bill * rate / selected_bytes_per_unit(db)
                 events = []
                 if changed: events.append('tag_changed')
                 if address_changed: events.append('address_changed')
@@ -257,9 +313,9 @@ def insert_poll(db, payload, timestamp, settings):
                 if settings.get('sparse_samples',False) and not du and not dd and event=='ok':
                     continue
                 db.execute('''INSERT INTO samples
-                (collected_at,node_id,node_name,port,tag,raw_up,raw_down,delta_up,delta_down,bill_bytes,rate_snapshot,cost,event)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                (timestamp,nid,node['node_name'],port,tag,p.get('uplink'),p.get('downlink'),du,dd,bill,rate,cost,event))
+                (collected_at,node_id,node_name,port,tag,raw_up,raw_down,delta_up,delta_down,bill_bytes,rate_snapshot,cost,rate_unit,event)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                (timestamp,nid,node['node_name'],port,tag,p.get('uplink'),p.get('downlink'),du,dd,bill,rate,cost,selected_unit(db),event))
                 count += 1
         import json
         db.execute('INSERT INTO poll_runs(collected_at,node_count,sample_count,errors_json) VALUES(?,?,?,?)',
