@@ -5,7 +5,6 @@
 <div class="nav-heading"><strong>بخش‌های پنل</strong><span>Traffic Monitor</span></div>
 <a href="#overview">نمای کلی</a>
 <a href="#providers-section">نمودار و ارائه‌دهندگان</a>
-<a href="#ports-section">گزارش پورت‌ها</a>
 <a href="#manage">مدیریت پورت‌ها</a>
 <a href="#expenses">هزینه‌های ثابت</a>
 <a href="#settings-section">تنظیمات</a>
@@ -28,7 +27,6 @@
 <div id="chart" class="chart"><span>در حال آماده‌سازی نمودار...</span></div>
 <div class="section-head cost-heading"><div><h2>نمودار تاریخی هزینه با تعرفه فعلی</h2><p>بازه انتخاب‌شده و ارائه‌دهنده / نود انتخابی؛ مبلغ ریالی یا تومانی متناسب با تنظیمات</p></div></div>
 <div id="cost-chart" class="chart"><span>در حال آماده‌سازی نمودار...</span></div></section>
-<section class="panel" id="ports-section"><div class="section-head"><div><h2>فهرست پورت‌ها</h2><p>هویت هر مسیر: شناسه سرور + شماره پورت. Tag صرفاً برای تطبیق با Xray است.</p></div><div><label>جست‌وجو <input id="search" placeholder="نام، پورت، ارائه‌دهنده..."></label> <label class="check"><input id="show_hidden" type="checkbox"> نمایش پورت‌های خارج‌شده</label></div></div><div class="table-scroll"><table><thead><tr><th>سرور / پورت</th><th>نام دلخواه / ارائه‌دهنده</th><th>دانلود</th><th>آپلود</th><th>هزینه با نرخ فعلی / ثبت‌شده قبلی</th><th>آخرین آمار</th><th>تنظیمات</th></tr></thead><tbody id="ports"><tr><td colspan="7">در حال بارگیری...</td></tr></tbody></table></div></section>
 <section class="panel" id="manage">
   <div class="section-head"><div><h2>مدیریت پورت‌ها و تنظیمات</h2>
     <p>بدون دستور ترمینال: انتخاب پورت‌های هر سرور و تنظیم عنوان و اطلاعات گزارش‌ها</p></div></div>
@@ -56,6 +54,16 @@
 </section>
 <footer>این سامانه سهمیه کاربران را تغییر نمی‌دهد. ترافیک پیش از راه‌اندازی مانیتور قابل بازیابی از شمارنده فعلی نیست. نمایش هزینه جایگزین صورتحساب ارائه‌دهنده نیست.</footer>
 </main>
+<dialog id="provider-report-dialog" class="provider-report-dialog" aria-labelledby="provider-report-title">
+<div class="section-head"><div><h2 id="provider-report-title">جزئیات و گزارش پورت‌ها</h2>
+<p id="provider-report-summary" class="sub"></p></div>
+<button id="provider-report-close" type="button" class="minor">بستن گزارش</button></div>
+<div class="report-filters">
+<label>جست‌وجوی پورت <input id="search" placeholder="نام، پورت، نود..."></label>
+<label class="check"><input id="show_hidden" type="checkbox"> نمایش پورت‌های پنهان</label></div>
+<div class="table-scroll"><table><thead><tr><th>نود / پورت</th><th>عنوان و ارائه‌دهنده</th><th>دانلود</th><th>آپلود</th><th>هزینه فعلی / تاریخی</th><th>آخرین آمار</th><th>عملیات</th></tr></thead>
+<tbody id="ports"><tr><td colspan="7">برای مشاهده گزارش یک ارائه‌دهنده را انتخاب کن.</td></tr></tbody></table></div>
+</dialog>
 <dialog id="edit"><form id="editform" method="dialog"><h2>تنظیمات پورت <span id="editing"></span></h2><input id="node_id" type="hidden"><input id="port" type="hidden"><label>عنوان دلخواه<input id="port_title" maxlength="128" placeholder="مثلاً Paqet آلمان"></label><label>نام شرکت/ارائه‌دهنده<input id="provider" maxlength="128" placeholder="مثلاً رانوی پورت"></label><label>تعرفه هر GB (یک میلیارد بایت) به <span id="rate-unit">ریال</span><input id="rate" type="number" step="0.01" min="0" required></label><label>جهت مشمول هزینه<select id="direction"><option value="downlink">Downlink (از سمت Xray به کاربر)</option><option value="uplink">Uplink (از کاربر به Xray)</option><option value="both">مجموع دو جهت</option></select></label><label>شروع محاسبه گزارش (تاریخ شمسی / ساعت UTC، اختیاری)
 <div class="since-controls"><span class="jfield"><input id="since-date-label" class="jinput" readonly aria-label="انتخاب تاریخ شمسی شروع گزارش" placeholder="انتخاب تاریخ شمسی"><input type="hidden" id="since"><span id="since-calendar" class="jcalendar" hidden></span></span><input type="time" id="since-time" aria-label="ساعت شروع گزارش به UTC" value="00:00" step="60"><button id="since-clear" type="button" class="minor">حذف تاریخ</button></div></label><label>یادداشت<textarea id="notes" rows="2"></textarea></label><label class="check"><input id="enabled" type="checkbox" checked> در داشبورد و جمع هزینه نمایش داده شود</label><p class="sub">هزینه اصلی داشبورد از مصرف ثبت‌شده در بازه × تعرفه فعلی این پورت حساب می‌شود. هزینه تاریخی با نرخ زمان ثبت هر نمونه برای حسابرسی حفظ می‌شود. تاریخ شروع فقط بازه گزارش را فیلتر می‌کند و ترافیک ثبت‌نشده را بازسازی نمی‌کند.</p><div class="buttons"><button class="minor" type="button" id="cancel">انصراف</button><button class="primary" type="submit">ذخیره تغییرات</button></div></form></dialog>
 <dialog id="expense-dialog"><form id="expense-form" method="dialog">
@@ -111,11 +119,11 @@
 <div class="buttons"><button type="button" class="minor" id="wallet-credit-cancel">انصراف</button><button type="submit" class="primary">ثبت شارژ/حجم</button></div>
 </form></dialog>
 <dialog id="wallet-reported-dialog"><form id="wallet-reported-form" method="dialog">
-<h2>ثبت مانده اعلام‌شده ربات برای مقایسه</h2>
+<h2>همسان‌سازی موجودی با ربات</h2>
 <input type="hidden" id="wallet-reported-account">
 <label>موجودی اعلام‌شده به <span id="wallet-reported-unit">تومان</span><input type="number" id="wallet-reported-amount" min="0" step="any" required></label>
-<p class="sub">این مقدار فقط برای مقایسه ذخیره می‌شود؛ کیف پول تخمینی را شارژ یا اصلاح نمی‌کند. بهتر است بعد از نمونه‌برداری مانده ربات را وارد کنی تا دو زمان به هم نزدیک باشند.</p>
-<div class="buttons"><button class="minor" type="button" id="wallet-reported-cancel">انصراف</button><button class="primary" type="submit">ثبت مانده مرجع</button></div>
+<label>توضیح علت اختلاف (اختیاری)<input id="wallet-reported-note" maxlength="250" placeholder="مثلاً مانده اعلامی پس از بررسی ربات"></label><p class="sub">با ذخیره، مانده محاسبه‌شده برابر مانده اعلامی می‌شود. اختلاف مثبت یا منفی در سوابق حساب ذخیره خواهد شد و مصرف بعدی از موجودی اصلاح‌شده کسر می‌شود. بهتر است پس از تازه‌سازی آمار مانده ربات را وارد کنی.</p>
+<div class="buttons"><button class="minor" type="button" id="wallet-reported-cancel">انصراف</button><button class="primary" type="submit">همسان‌سازی موجودی</button></div>
 </form></dialog>
 <script src="/jalali.js"></script>
 <script src="/dashboard.js"></script>
