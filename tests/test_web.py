@@ -153,6 +153,24 @@ class WebTests(unittest.TestCase):
         found=next(a for a in json.loads(raw)['accounts'] if a['id']==aid)
         self.assertEqual(found['estimated_balance'],2925750)
         self.assertEqual(found['comparison_gap'],0)
+        with patch.object(supplier_wallets,'utc_now',return_value='2026-10-13T00:04:00+00:00'):
+            st,_,raw=self.request('POST','/api/wallets/reconcile',
+                json.dumps({'account_id':aid,'amount':2920000,'note':'bot lower'}),headers)
+            self.assertEqual(st,200)
+            self.assertEqual(json.loads(raw)['result']['adjustment'],-5750)
+        with patch.object(supplier_wallets,'utc_now',return_value='2026-10-13T00:05:00+00:00'):
+            st,_,raw=self.request('POST','/api/wallets/reconcile',
+                json.dumps({'account_id':aid,'amount':2930000,'note':'bot higher'}),headers)
+            self.assertEqual(st,200)
+            self.assertEqual(json.loads(raw)['result']['adjustment'],10000)
+        st,_,raw=self.request('GET','/api/wallets',headers={'Cookie':cookie})
+        found=next(a for a in json.loads(raw)['accounts'] if a['id']==aid)
+        self.assertEqual(found['estimated_balance'],2930000)
+        self.assertEqual(found['reconciliation_summary']['count'],3)
+        self.assertEqual(found['reconciliation_summary']['positive'],10000)
+        self.assertEqual(found['reconciliation_summary']['negative'],5750)
+        self.assertEqual(found['reconciliation_summary']['net'],4250)
+        self.assertEqual(found['reconciliation_history'][0]['note'],'bot higher')
         with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
             after=tuple(db.execute('SELECT COUNT(*),COALESCE(SUM(delta_down),0) FROM samples').fetchone())
         self.assertEqual(before,after)
