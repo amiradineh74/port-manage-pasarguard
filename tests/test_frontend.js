@@ -23,7 +23,7 @@ const Jalali={...realJalali,attach(field,displayId){
   };
 }};
 const dashboardTemplate=fs.readFileSync(path.join(__dirname,'../app/dashboard.html'),'utf8');
-const navigationLabels=['نمای کلی','نمودار و ارائه‌دهندگان','گزارش پورت‌ها','مدیریت پورت‌ها','هزینه‌های ثابت','تنظیمات'];
+const navigationLabels=['نمای کلی','نمودار و ارائه‌دهندگان','مدیریت پورت‌ها','هزینه‌های ثابت','تنظیمات'];
 for(const name of navigationLabels)assert.ok(dashboardTemplate.includes('>'+name+'</a>'),'missing navigation: '+name);
 assert.ok(dashboardTemplate.indexOf('id="expenses"')>dashboardTemplate.indexOf('id="manage"'),
  'Fixed costs must follow management/settings section');
@@ -31,6 +31,8 @@ assert.ok(dashboardTemplate.includes('class="expense-formula"'));
 assert.ok(dashboardTemplate.includes('id="main-nav"'));
 assert.ok(dashboardTemplate.includes('id="nav-toggle"'));
 assert.ok(dashboardTemplate.includes('id="nav-backdrop"'));
+assert.ok(dashboardTemplate.includes('id="provider-report-dialog"'));
+assert.ok(!dashboardTemplate.includes('id="ports-section"'));
 for(const id of ['provider-wallet-dialog','provider-wallet-name','provider-wallet-opening','wallet-credit-dialog','wallet-reported-dialog']){
  assert.ok(dashboardTemplate.includes('id="'+id+'"'),'missing supplier UI: '+id);
 }
@@ -72,6 +74,11 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  vm.runInContext("state.wallets=[{id:11,provider:'A',title:'A',kind:'money',bot_handle:'@sample',estimated_balance:2422750,opening_rial:2437750,opening_bytes:0,credited:0,spent_rial:15000,used_bytes:1250000000,reported_balance:null,started_at:'2026-10-14T00:00:00+00:00',ports:[],credit_history:[],check_history:[]}];renderProviderPanels()",ctx);
  assert.ok(elem('providers').innerHTML.includes('۲٬۴۲۲٬۷۵۰'));
  assert.ok(elem('providers').innerHTML.includes('provider-credit'));
+ assert.ok(elem('providers').innerHTML.includes('جزئیات و گزارش پورت‌ها'));
+ vm.runInContext("openProviderReport('A')",ctx);
+ assert.ok(elem('provider-report-title').textContent.includes('A'));
+ assert.ok(elem('ports').innerHTML.includes('Germany'));
+ assert.ok(elem('ports').innerHTML.includes('Turkey'));
  vm.runInContext("state.wallets=[];renderProviderPanels()",ctx);
  assert.ok(elem('providers').innerHTML.includes('حساب اعتبار جدید'));
  assert.equal(elem('main-nav').dataset.open,'false');
