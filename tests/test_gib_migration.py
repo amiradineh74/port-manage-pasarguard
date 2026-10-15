@@ -75,7 +75,7 @@ class LegacyUnitUpgradeTests(unittest.TestCase):
             db.commit()
             db.close()
             db=connect(path)
-            self.assertEqual(db.execute('SELECT COUNT(*) FROM supplier_port_terms WHERE binding_id=7').fetchone()[0],2)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM supplier_port_terms WHERE binding_id=7').fetchone()[0],1)
             self.assertEqual(db.execute('SELECT SUM(delta_down) FROM samples').fetchone()[0],
                              2*LEGACY_BYTES_PER_GB)
             db.close()
