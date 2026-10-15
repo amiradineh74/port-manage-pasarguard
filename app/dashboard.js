@@ -323,6 +323,15 @@ function renderWallets(){
    ' / '+p.port+' · '+escapeHtml(p.direction)+' · '+walletAmount(p.billed_bytes,'volume')+
    (a.kind==='money'?' · '+walletAmount(p.charge_rial,'money')+' با نرخ '+walletAmount(p.rate_rial_per_gb,'money')+'/GB':'')+
    '</div>').join('')+'</div>'+
+   '<details class="wallet-history"><summary>سوابق شارژ و مقایسه با ربات</summary>'+
+   (a.credit_history||[]).slice(0,6).map(t=>'<p class="sub">شارژ جدید · '+escapeHtml(walletDate(t.created_at))+' · '+
+    walletAmount(t.amount,a.kind)+' · '+escapeHtml(t.note||'')+'</p>').join('')+
+   (a.check_history||[]).slice(0,6).map(check=>'<p class="sub">مقایسه · '+escapeHtml(walletDate(check.checked_at))+
+    ' · ربات: '+walletAmount(check.reported_amount,a.kind)+
+    ' · محاسبه: '+walletAmount(check.estimated_amount,a.kind)+
+    ' · اختلاف: '+walletAmount(check.difference,a.kind)+'</p>').join('')+
+   (!(a.credit_history||[]).length&&!(a.check_history||[]).length?'<p class="sub">هنوز سابقه‌ای ثبت نشده.</p>':'')+
+   '</details>'+
    '<div class="wallet-actions"><button type="button" class="minor w-attach" data-id="'+a.id+'">اتصال پورت</button>'+
    '<button type="button" class="minor w-credit" data-id="'+a.id+'">'+(a.kind==='money'?'شارژ جدید':'خرید حجم جدید')+'</button>'+
    '<button type="button" class="minor w-reported" data-id="'+a.id+'">ثبت مانده ربات</button></div></article>';
