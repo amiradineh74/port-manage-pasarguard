@@ -124,7 +124,7 @@ def _selected_paths(db,provider,ports):
         selected.append(available[key])
     return selected
 
-def _apply_ports(db,account_id,provider,selected,now):
+def _apply_ports(db,account_id,provider,selected,now,allow_transfer=False):
     """Close prior active intervals and open new intervals; NEVER rewrite past usage."""
     selected_keys={(p['node_id'],p['port']) for p in selected}
     previous=db.execute('''SELECT * FROM supplier_ports
@@ -137,6 +137,8 @@ def _apply_ports(db,account_id,provider,selected,now):
         if active and active['account_id']==account_id:
             continue
         if active:
+            if not allow_transfer:
+                raise ValueError('انتقال پورت از حساب دیگر نیاز به تأیید صریح دارد')
             # Explicit transfer preserves old account's consumed bytes and rate terms.
             other_provider=db.execute('''SELECT provider FROM provider_wallet_links
                 WHERE account_id=?''',(active['account_id'],)).fetchone()
@@ -199,7 +201,9 @@ def assign_provider_wallet(db,data):
                 raise ValueError('پورت به کیف پول دیگری که متعلق به این ارائه‌دهنده نیست متصل است')
     db.execute('INSERT OR IGNORE INTO provider_wallet_links(provider,account_id) VALUES(?,?)',
                (provider,account_id))
-    _apply_ports(db,account_id,provider,selected,utc_now())
+    if type(data.get('confirm_transfer',False)) is not bool:
+        raise ValueError('تأیید انتقال نامعتبر است')
+    _apply_ports(db,account_id,provider,selected,utc_now(),data.get('confirm_transfer',False))
     return account_id
 
 def add_credit(db,data):
