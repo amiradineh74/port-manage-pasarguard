@@ -628,7 +628,7 @@ async function saveExpense(event){
 function openEdit(node,port){const p=state.ports.find(x=>x.node_id===node&&x.port===port);if(!p)return;
  $('editing').textContent=p.port+' / '+p.node_name; $('node_id').value=node; $('port').value=port;
  $('port_title').value=p.title; $('provider').value=p.provider; $('rate').value=p.price_per_gb*multiplier();
- $('rate-unit').textContent=unit();
+ $('rate-unit').textContent=unit(); $('rate-volume-unit').textContent=volumeUnit();
  $('rate').step=isRial()?'1':'0.01';
  if(isRial())$('rate').value=Math.round(p.price_per_gb*10);
  $('direction').value=p.bill_direction;$('notes').value=p.notes;$('enabled').checked=!!p.enabled;
