@@ -119,6 +119,11 @@ function renderProviderPanels(){
   if(!names.has(key))names.set(key,{down:0,up:0,billed:0,cost:0,historical_cost:0});
   const value=names.get(key);for(const col of Object.keys(value))value[col]+=Number(p[col]||0);
  }
+ // Never make a linked wallet inaccessible because its ports were hidden.
+ if(selectedNode==='all')for(const account of wallets()){
+  if(account.provider&&!names.has(account.provider))
+   names.set(account.provider,{down:0,up:0,billed:0,cost:0,historical_cost:0});
+ }
  $('providers').innerHTML=[...names.entries()].map(([name,v])=>{
   const active=name===selectedProvider,title=name==='__all__'?allLabel:name;
   return '<article class="provider-shell">'+
