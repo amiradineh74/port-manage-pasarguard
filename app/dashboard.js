@@ -151,6 +151,7 @@ function render(){if(!state)return;
  $('status').textContent=lr?'آخرین نمونه‌برداری: '+age(lr.collected_at)+' | تعداد نمونه: '+fmt(lr.sample_count)+(JSON.parse(lr.errors_json).length?' | هشدار: '+JSON.parse(lr.errors_json).join('، '):''):'هنوز نمونه‌ای ثبت نشده؛ یک بار دستور collect را اجرا کنید.';
  renderProviderPanels();
  renderExpenses();
+ renderWallets();
  const q=$('search').value.trim().toLowerCase();
  const ports=state.ports.filter(p=>(selectedProvider==='__all__'||(p.provider||'بدون ارائه‌دهنده')===selectedProvider)&&(selectedNode==='all'||p.node_id===Number(selectedNode))&&(p.enabled||$('show_hidden').checked)&&[p.node_name,p.port,p.title,p.provider,p.tag].join(' ').toLowerCase().includes(q));
  $('ports').innerHTML=ports.map(p=>`<tr class="${p.enabled?'':'muted'}"><td><strong>${escapeHtml(p.node_name)}</strong><span class="sub">پورت ${p.port} · نود ${p.node_id}</span></td><td>${escapeHtml(p.title||'بدون نام دلخواه')}<span class="sub">${escapeHtml(p.provider||'تعرفه تعیین نشده')} · <span class="tag">${escapeHtml(p.tag)}</span></span></td><td>${traffic(p.down)}</td><td>${traffic(p.up)}</td><td class="money">${money(p.cost)}<span class="sub">قبلی: ${money(p.historical_cost)}</span></td><td>${age(p.last_seen)}</td><td><button class="editbtn" data-nid="${p.node_id}" data-port="${p.port}">ویرایش</button></td></tr>`).join('')||'<tr><td colspan="7">پورتی پیدا نشد.</td></tr>';
@@ -282,6 +283,142 @@ function renderExpenseCosts(trafficCost){
  else if(selectedProvider!=='__all__')context='فقط هزینه‌های مستقیم همین ارائه‌دهنده؛ هزینه مشترک نود یا پنل سرشکن نمی‌شود';
  $('expenses-scope-note').textContent='مبلغ ثابت در خلاصه بالا: '+money(rial/10)+' — '+context;
 }
+function walletAmount(value,kind){
+ if(kind==='money')return new Intl.NumberFormat('fa-IR',{maximumFractionDigits:0}).format(Math.round(value/10))+' تومان';
+ return new Intl.NumberFormat('fa-IR',{maximumFractionDigits:3}).format(value/1e9)+' GB';
+}
+function walletDate(utc){
+ if(!utc)return '—';
+ const d=new Date(utc);
+ return new Intl.DateTimeFormat('fa-IR',{dateStyle:'short',timeStyle:'short',timeZone:state.timezone||'Asia/Tehran'}).format(d);
+}
+function wallets(){
+ return state?.wallets||[];
+}
+function walletById(id){return wallets().find(x=>x.id===Number(id));}
+function renderWallets(){
+ const container=$('wallets-list');
+ if(!container)return;
+ const accounts=wallets();
+ if(!accounts.length){container.innerHTML='<p class="sub">هنوز کیف پولی ثبت نکردی. روی «افزودن ربات / حساب» بزن.</p>';return;}
+ container.innerHTML=accounts.map(a=>{
+  const unit=a.kind==='money'?'کیف پول پولی':'سهمیه حجمی';
+  const remaining=walletAmount(a.estimated_balance,a.kind);
+  const opening=walletAmount(a.kind==='money'?a.opening_rial:a.opening_bytes,a.kind);
+  const credit=walletAmount(a.credited,a.kind);
+  const expense=a.kind==='money'?walletAmount(a.spent_rial,'money'):walletAmount(a.used_bytes,'volume');
+  const compare=a.reported_balance===null?'هنوز مانده مرجع از ربات ثبت نشده':
+     'آخرین مانده اعلام‌شده: '+walletAmount(a.reported_balance,a.kind)+
+     ' · اختلاف برآورد در زمان ثبت: '+walletAmount(a.comparison_gap,a.kind);
+  const warning=a.estimated_balance<0?' هشدار: اعتبار تخمینی منفی شده.': '';
+  return '<article class="wallet-card"><div class="wallet-card-head"><div><h3>'+escapeHtml(a.title)+
+   '</h3><span class="sub">'+escapeHtml(a.bot_handle||unit)+' · '+unit+'</span></div>'+
+   '<strong class="wallet-current">'+remaining+'</strong></div>'+
+   '<div class="wallet-facts"><span>مانده اولیه: '+opening+'</span>'+
+   '<span>شارژ/حجم اضافه‌شده: '+credit+'</span>'+
+   '<span>کسرشده بر اساس Xray: '+expense+'</span>'+
+   '<span>شروع محاسبه: '+escapeHtml(walletDate(a.started_at))+'</span></div>'+
+   '<p class="sub">'+escapeHtml(compare+warning)+'</p>'+
+   '<div class="wallet-ports">'+a.ports.map(p=>'<div class="wallet-port">'+escapeHtml(p.node_name||('Node '+p.node_id))+
+   ' / '+p.port+' · '+escapeHtml(p.direction)+' · '+walletAmount(p.billed_bytes,'volume')+
+   (a.kind==='money'?' · '+walletAmount(p.charge_rial,'money')+' با نرخ '+walletAmount(p.rate_rial_per_gb,'money')+'/GB':'')+
+   '</div>').join('')+'</div>'+
+   '<div class="wallet-actions"><button type="button" class="minor w-attach" data-id="'+a.id+'">اتصال پورت</button>'+
+   '<button type="button" class="minor w-credit" data-id="'+a.id+'">'+(a.kind==='money'?'شارژ جدید':'خرید حجم جدید')+'</button>'+
+   '<button type="button" class="minor w-reported" data-id="'+a.id+'">ثبت مانده ربات</button></div></article>';
+ }).join('');
+ for(const selector of ['attach','credit','reported']){
+  container.querySelectorAll('.w-'+selector).forEach(button=>
+   button.addEventListener('click',()=>openWalletDialog(selector,Number(button.dataset.id))));
+ }
+}
+function walletInputNumber(field,kind){
+ const n=Number($(field).value);
+ if(!Number.isFinite(n)||n<0)throw Error('مقدار معتبر وارد کن.');
+ if(kind==='money'&&!Number.isInteger(n))throw Error('مبلغ تومانی را به صورت عدد صحیح وارد کن.');
+ const amount=Math.round(n*(kind==='money'?10:1e9));
+ if(!Number.isSafeInteger(amount)||amount<0)throw Error('مقدار خیلی بزرگ است.');
+ return amount;
+}
+function openWalletDialog(type,id){
+ const acc=walletById(id);
+ if(!acc)return;
+ if(type==='attach'){
+  $('wallet-port-account').value=String(id);
+  $('wallet-port-rate-wrap').hidden=acc.kind==='volume';
+  $('wallet-port-rate').value='0';
+  const used=new Set(wallets().flatMap(a=>a.ports.map(p=>p.node_id+':'+p.port)));
+  const options=state.ports.filter(p=>!used.has(p.node_id+':'+p.port));
+  $('wallet-port-identity').innerHTML=options.map(p=>
+   '<option value="'+p.node_id+':'+p.port+'">'+escapeHtml(p.node_name)+' / '+p.port+'</option>').join('');
+  if(!options.length){alert('همه پورت‌های مشاهده‌شده به حساب دیگری متصل شده‌اند.');return;}
+  $('wallet-port-dialog').showModal();
+ }else if(type==='credit'){
+  $('wallet-credit-account').value=String(id);
+  $('wallet-credit-unit').textContent=acc.kind==='money'?'تومان':'GB';
+  $('wallet-credit-heading').textContent=acc.kind==='money'?'ثبت شارژ جدید':'ثبت حجم خریداری‌شده جدید';
+  $('wallet-credit-amount').value='';
+  $('wallet-credit-note').value='';
+  $('wallet-credit-dialog').showModal();
+ }else if(type==='reported'){
+  $('wallet-reported-account').value=String(id);
+  $('wallet-reported-unit').textContent=acc.kind==='money'?'تومان':'GB';
+  $('wallet-reported-amount').value='';
+  $('wallet-reported-dialog').showModal();
+ }
+}
+async function saveWalletRequest(e,url,payload,dialog){
+ e.preventDefault();
+ const button=e.currentTarget.querySelector('button[type=submit]');
+ button.disabled=true;
+ try{
+  await sendUpdate(url,payload());
+  $(dialog).close();
+  await reload();
+ }catch(err){alert(err.message);}finally{button.disabled=false;}
+}
+function installWalletForms(){
+ $('wallet-new').addEventListener('click',()=>{
+  $('wallet-create-form').reset();
+  $('wallet-open-unit').textContent='تومان';
+  $('wallet-opening').step='1';
+  $('wallet-create-dialog').showModal();
+ });
+ $('wallet-kind').addEventListener('change',()=>{
+  const quota=$('wallet-kind').value==='volume';
+  $('wallet-open-unit').textContent=quota?'GB':'تومان';
+  $('wallet-opening').step=quota?'any':'1';
+ });
+ for(const [prefix,name] of [['wallet-create','create'],['wallet-port','port'],
+   ['wallet-credit','credit'],['wallet-reported','reported']]){
+  $(prefix+'-cancel').addEventListener('click',()=>$(prefix+'-dialog').close());
+ }
+ $('wallet-create-form').addEventListener('submit',e=>saveWalletRequest(e,'/api/wallets/create',()=>{
+  return {title:$('wallet-title').value,bot_handle:$('wallet-handle').value,
+   kind:$('wallet-kind').value,opening_amount:walletInputNumber('wallet-opening',$('wallet-kind').value),
+   notes:$('wallet-notes').value};
+ },'wallet-create-dialog'));
+ $('wallet-port-form').addEventListener('submit',e=>saveWalletRequest(e,'/api/wallets/attach',()=>{
+  const [node,port]=$('wallet-port-identity').value.split(':').map(Number);
+  const acc=walletById($('wallet-port-account').value);
+  if(!acc)throw Error('حساب انتخاب نشده است');
+  return {account_id:acc.id,node_id:node,port,
+    direction:$('wallet-port-direction').value,
+    rate_rial_per_gb:acc.kind==='money'?walletInputNumber('wallet-port-rate','money'):0};
+ },'wallet-port-dialog'));
+ $('wallet-credit-form').addEventListener('submit',e=>saveWalletRequest(e,'/api/wallets/credit',()=>{
+  const acc=walletById($('wallet-credit-account').value);
+  if(!acc)throw Error('حساب پیدا نشد');
+  return {account_id:acc.id,amount:walletInputNumber('wallet-credit-amount',acc.kind),
+    note:$('wallet-credit-note').value};
+ },'wallet-credit-dialog'));
+ $('wallet-reported-form').addEventListener('submit',e=>saveWalletRequest(e,'/api/wallets/reported',()=>{
+  const acc=walletById($('wallet-reported-account').value);
+  if(!acc)throw Error('حساب پیدا نشد');
+  return {account_id:acc.id,amount:walletInputNumber('wallet-reported-amount',acc.kind)};
+ },'wallet-reported-dialog'));
+}
+
 function renderExpenses(){
  if(!state)return;
  const items=state.fixed_expenses||[];
@@ -409,6 +546,7 @@ const sincePicker=Jalali.attach('since','since-date-label','since-calendar');
 const expenseStartPicker=Jalali.attach('expense-start','expense-start-label','expense-start-calendar');
 const expenseEndPicker=Jalali.attach('expense-end','expense-end-label','expense-end-calendar');
 $('new-expense').addEventListener('click',()=>showExpense(null));
+installWalletForms();
 $('expense-scope').addEventListener('change',refreshExpenseForm);
 $('expense-frequency').addEventListener('change',refreshExpenseForm);
 $('expense-end-clear').addEventListener('click',()=>expenseEndPicker.clear());
