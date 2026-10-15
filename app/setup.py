@@ -135,6 +135,17 @@ def main():
     cfg['timezone']=ask('Reporting timezone',cfg['timezone'],timezone_ok)
     cfg['listen_host']=ask('Web listen address (127.0.0.1 recommended)',cfg['listen_host'])
     cfg['listen_port']=ask('Dashboard port',cfg['listen_port'],lambda n:1024<=n<=65535,int)
+    # One immutable choice per independent installation: no provider/port overrides.
+    # Old configs get an explicit choice when setup is run, never a silent conversion.
+    if 'traffic_unit' not in cfg:
+        print('Traffic/accounting unit: GB = 1,000,000,000 bytes (1000); '
+              'GiB = 1,073,741,824 bytes (1024).')
+        cfg['traffic_unit']=ask('Choose ONE traffic unit for the whole installation: GB or GiB',
+                                'GiB',lambda x:x in ('GB','GiB'))
+    else:
+        from units import check_unit
+        check_unit(cfg['traffic_unit'])
+        print('Traffic unit (locked for this installation):',cfg['traffic_unit'])
     cfg['currency']=ask('Display currency: Rial or Toman',cfg['currency'],
          lambda name:name in ('Rial','Toman','ریال','تومان'))
     cfg['default_bill_direction']=ask('Default billed direction: downlink/uplink/both',cfg['default_bill_direction'],lambda s:s in ('downlink','uplink','both'))
@@ -142,7 +153,7 @@ def main():
     # the installer accepts Rial when the selected display currency is Rial.
     use_rial=cfg['currency'] in ('Rial','ریال')
     shown_rate=cfg['default_price_per_gb'] * (10 if use_rial else 1)
-    entered_rate=ask('Default rate per GiB in '+('Rial' if use_rial else 'Toman')+
+    entered_rate=ask('Default rate per '+cfg['traffic_unit']+' in '+('Rial' if use_rial else 'Toman')+
         ' (0 = configure later per port)',shown_rate,lambda n:0<=n<1e13,float)
     cfg['default_price_per_gb']=entered_rate/(10 if use_rial else 1)
     ports=ask('Excluded ports (comma-separated)',' ,'.join(map(str,cfg['exclude_ports'])))
