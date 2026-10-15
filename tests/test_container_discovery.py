@@ -74,7 +74,7 @@ class DockerDiscoveryTests(unittest.TestCase):
     def test_multiple_non_obvious_containers_require_explicit_selection(self):
         cfg=dict(setup.DEFAULT)
         with patch.object(setup,'running_docker_containers',return_value=['custom-panel','backup-service']), \
-             patch('builtins.input',side_effect=['','2']), \
+             patch('builtins.input',side_effect=['','custom-panel']), \
              patch.object(setup,'ask',return_value='/code/.venv/bin/python'), \
              patch.object(setup,'list_nodes',return_value=[{'id':9,'name':'Node'}]), \
              contextlib.redirect_stdout(io.StringIO()) as output:
