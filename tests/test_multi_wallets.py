@@ -1,4 +1,3 @@
-from units import BYTES_PER_GIB as GiB
 """Multi-credit provider accounts: independent money/volume, safe migration/moves."""
 import tempfile,unittest,sys,sqlite3
 from pathlib import Path
@@ -6,6 +5,7 @@ from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'app'))
 from storage import connect,insert_poll
 import supplier_wallets as w
+from units import BYTES_PER_GIB as GiB
 
 class MultiProviderTests(unittest.TestCase):
     def setUp(self):
