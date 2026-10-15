@@ -137,11 +137,14 @@ function renderProviderPanels(){
         ? (selectedNode==='all'||(e.scope==='node'&&e.node_id===Number(selectedNode)))
         : (selectedNode==='all'&&e.scope==='provider'&&e.provider===name)
       ).reduce((sum,e)=>sum+Number(e.period_rial||0),0)/10)+'</small></button>'+
+    '<button class="minor provider-report-button" data-provider="'+escapeHtml(name)+'" type="button">جزئیات و گزارش پورت‌ها</button>'+
     providerWalletDetails(name)+'</article>';
  }).join('');
  document.querySelectorAll('.provider-button').forEach(b=>b.addEventListener('click',()=>{
   selectedProvider=b.dataset.provider;render();
  }));
+ document.querySelectorAll('.provider-report-button').forEach(b=>
+  b.addEventListener('click',()=>openProviderReport(b.dataset.provider)));
  wireProviderWalletActions();
  const scale=$('chart-scale').value;
  const hourly=state.hourly_available && (scale==='hourly'||(scale==='auto'&&$('from').value===$('to').value));
@@ -159,14 +162,30 @@ function render(){if(!state)return;
  $('status').textContent=lr?'آخرین نمونه‌برداری: '+age(lr.collected_at)+' | تعداد نمونه: '+fmt(lr.sample_count)+(JSON.parse(lr.errors_json).length?' | هشدار: '+JSON.parse(lr.errors_json).join('، '):''):'هنوز نمونه‌ای ثبت نشده؛ یک بار دستور collect را اجرا کنید.';
  renderProviderPanels();
  renderExpenses();
- const q=$('search').value.trim().toLowerCase();
- const ports=state.ports.filter(p=>(selectedProvider==='__all__'||(p.provider||'بدون ارائه‌دهنده')===selectedProvider)&&(selectedNode==='all'||p.node_id===Number(selectedNode))&&(p.enabled||$('show_hidden').checked)&&[p.node_name,p.port,p.title,p.provider,p.tag].join(' ').toLowerCase().includes(q));
- $('ports').innerHTML=ports.map(p=>`<tr class="${p.enabled?'':'muted'}"><td><strong>${escapeHtml(p.node_name)}</strong><span class="sub">پورت ${p.port} · نود ${p.node_id}</span></td><td>${escapeHtml(p.title||'بدون نام دلخواه')}<span class="sub">${escapeHtml(p.provider||'تعرفه تعیین نشده')} · <span class="tag">${escapeHtml(p.tag)}</span></span></td><td>${traffic(p.down)}</td><td>${traffic(p.up)}</td><td class="money">${money(p.cost)}<span class="sub">قبلی: ${money(p.historical_cost)}</span></td><td>${age(p.last_seen)}</td><td><button class="editbtn" data-nid="${p.node_id}" data-port="${p.port}">ویرایش</button></td></tr>`).join('')||'<tr><td colspan="7">پورتی پیدا نشد.</td></tr>';
- document.querySelectorAll('.editbtn').forEach(btn=>btn.addEventListener('click',()=>openEdit(Number(btn.dataset.nid),Number(btn.dataset.port))));
+ if($('provider-report-dialog').open)renderPortReport();
  $('export').href='/api/export.csv?'+new URLSearchParams({from:$('from').value,to:$('to').value});
  $('export-expenses').href='/api/expenses.csv?'+new URLSearchParams({from:$('from').value,to:$('to').value});
 }
 
+
+let reportProvider='__all__';
+function openProviderReport(provider){
+ reportProvider=provider;
+ $('search').value='';
+ $('show_hidden').checked=false;
+ renderPortReport();
+ $('provider-report-dialog').showModal();
+}
+function renderPortReport(){
+ if(!state)return;
+ const q=$('search').value.trim().toLowerCase();
+ const ports=state.ports.filter(p=>(reportProvider==='__all__'||(p.provider||'بدون ارائه‌دهنده')===reportProvider)&&(selectedNode==='all'||p.node_id===Number(selectedNode))&&(p.enabled||$('show_hidden').checked)&&[p.node_name,p.port,p.title,p.provider,p.tag].join(' ').toLowerCase().includes(q));
+ const totals=summarize(ports);
+ $('provider-report-title').textContent='گزارش پورت‌ها — '+(reportProvider==='__all__'?'همه ارائه‌دهنده‌ها':reportProvider);
+ $('provider-report-summary').textContent=ports.length+' پورت | دانلود '+traffic(totals.down)+' | آپلود '+traffic(totals.up)+' | هزینه '+money(totals.cost);
+ $('ports').innerHTML=ports.map(p=>`<tr class="${p.enabled?'':'muted'}"><td><strong>${escapeHtml(p.node_name)}</strong><span class="sub">پورت ${p.port} · نود ${p.node_id}</span></td><td>${escapeHtml(p.title||'بدون نام دلخواه')}<span class="sub">${escapeHtml(p.provider||'تعرفه تعیین نشده')} · <span class="tag">${escapeHtml(p.tag)}</span></span></td><td>${traffic(p.down)}</td><td>${traffic(p.up)}</td><td class="money">${money(p.cost)}<span class="sub">قبلی: ${money(p.historical_cost)}</span></td><td>${age(p.last_seen)}</td><td><button class="editbtn" data-nid="${p.node_id}" data-port="${p.port}">ویرایش</button></td></tr>`).join('')||'<tr><td colspan="7">پورتی پیدا نشد.</td></tr>';
+ document.querySelectorAll('.editbtn').forEach(btn=>btn.addEventListener('click',()=>{ $('provider-report-dialog').close();openEdit(Number(btn.dataset.nid),Number(btn.dataset.port)); }));
+}
 
 function checkedPorts(form){
  return [...form.querySelectorAll('input.port-box:checked')].map(x=>Number(x.value)).sort((a,b)=>a-b);
@@ -619,7 +638,8 @@ rangeTo.set(initialDay);
 rangeFrom.set(new Date(Date.parse(initialDay+'T00:00:00Z')-6*86400000).toISOString().slice(0,10));
 $('reload').addEventListener('click',reload);
 $('node-filter').addEventListener('change',()=>{selectedNode=$('node-filter').value;render();});
-$('chart-scale').addEventListener('change',renderProviderPanels);$('search').addEventListener('input',render);$('show_hidden').addEventListener('change',render);
+$('chart-scale').addEventListener('change',renderProviderPanels);$('search').addEventListener('input',renderPortReport);$('show_hidden').addEventListener('change',renderPortReport);
+$('provider-report-close').addEventListener('click',()=>$('provider-report-dialog').close());
 $('display-form').addEventListener('submit',saveDisplaySettings);
 $('editform').addEventListener('submit',save);$('cancel').addEventListener('click',()=>$('edit').close());
 $('logout').addEventListener('click',async()=>{if(!state){location.href='/login';return;}await fetch('/api/logout',{method:'POST',headers:{'X-CSRF-Token':state.csrf}});location.href='/login';});
