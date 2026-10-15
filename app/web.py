@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 from storage import connect
 from fixed_costs import validate_expense, expenses_report, fixed_total
 from supplier_wallets import (wallet_report,create_account,update_account,attach_port,
-    add_credit,report_balance,assign_provider_wallet,sync_provider_port)
+    add_credit,report_balance,reconcile_balance,assign_provider_wallet,sync_provider_port)
 
 CFG = None
 ROOT = Path(__file__).resolve().parent
@@ -302,7 +302,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({'error':'این ارائه‌دهنده قبلاً حساب اعتبار دارد'},400)
         if path in ('/api/wallets/create','/api/wallets/edit',
                     '/api/wallets/attach','/api/wallets/credit',
-                    '/api/wallets/reported'):
+                    '/api/wallets/reported','/api/wallets/reconcile'):
             try:
                 payload=json.loads(self.read_body())
                 if type(payload) is not dict:raise ValueError('درخواست نامعتبر است')
@@ -312,6 +312,7 @@ class Handler(BaseHTTPRequestHandler):
                   '/api/wallets/attach':attach_port,
                   '/api/wallets/credit':add_credit,
                   '/api/wallets/reported':report_balance,
+                  '/api/wallets/reconcile':reconcile_balance,
                 }
                 with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
                     with db:
