@@ -142,7 +142,7 @@ def main():
     # the installer accepts Rial when the selected display currency is Rial.
     use_rial=cfg['currency'] in ('Rial','ریال')
     shown_rate=cfg['default_price_per_gb'] * (10 if use_rial else 1)
-    entered_rate=ask('Default rate per GB in '+('Rial' if use_rial else 'Toman')+
+    entered_rate=ask('Default rate per GiB in '+('Rial' if use_rial else 'Toman')+
         ' (0 = configure later per port)',shown_rate,lambda n:0<=n<1e13,float)
     cfg['default_price_per_gb']=entered_rate/(10 if use_rial else 1)
     ports=ask('Excluded ports (comma-separated)',' ,'.join(map(str,cfg['exclude_ports'])))
