@@ -87,12 +87,18 @@ def report_balance(db,data):
     account=known_account(db,data.get('account_id'))
     amount=require_int(data.get('amount'),'مانده اعلام‌شده',0)
     now=utc_now()
+    bindings=[dict(r) for r in db.execute(
+        'SELECT * FROM supplier_ports WHERE account_id=?',(account['id'],))]
+    estimate=_estimate(db,account,bindings,now)['estimated_balance']
+    gap=estimate-amount
     if account['kind']=='money':
         db.execute('UPDATE supplier_accounts SET reported_rial=?,reported_at=? WHERE id=?',
                    (amount,now,account['id']))
     else:
         db.execute('UPDATE supplier_accounts SET reported_bytes=?,reported_at=? WHERE id=?',
                    (amount,now,account['id']))
+    db.execute('''INSERT INTO supplier_checks(account_id,checked_at,reported_amount,estimated_amount,difference)
+                  VALUES(?,?,?,?,?)''',(account['id'],now,amount,estimate,gap))
 
 def _estimate(db,account,bindings,until=None):
     spent_rial=0
@@ -131,12 +137,12 @@ def wallet_report(db):
            WHERE b.account_id=? ORDER BY b.node_id,b.port''',(a['id'],))]
         result=_estimate(db,account,bindings)
         reported=(account['reported_rial'] if a['kind']=='money' else account['reported_bytes'])
-        comparison=None
-        if reported is not None and account['reported_at']:
-            historical=_estimate(db,account,bindings,account['reported_at'])
-            comparison=historical['estimated_balance']-reported
+        checks=[dict(r) for r in db.execute(
+            'SELECT * FROM supplier_checks WHERE account_id=? ORDER BY id DESC LIMIT 20',(a['id'],))]
+        comparison=checks[0]['difference'] if checks else None
         credits=[dict(r) for r in db.execute(
             'SELECT * FROM supplier_credits WHERE account_id=? ORDER BY id DESC LIMIT 20',(a['id'],))]
         accounts.append(dict(account,**result,reported_balance=reported,
-                             comparison_gap=comparison,credit_history=credits))
+                             comparison_gap=comparison,credit_history=credits,
+                             check_history=checks))
     return accounts
