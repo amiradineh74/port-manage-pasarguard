@@ -39,16 +39,60 @@ class WalletTests(unittest.TestCase):
             wallets.report_balance(self.db,{'account_id':aid,'amount':4420000})
         self.db.commit()
         a=wallets.wallet_report(self.db)[0]
-        self.assertEqual(a['estimated_balance'],4422750)
-        self.assertEqual(a['comparison_gap'],2750)
+        self.assertEqual(a['estimated_balance'],4420000)
+        self.assertEqual(a['comparison_gap'],-2750)
         self.poll(5000000000,750000000,'2026-10-14T01:04:00+00:00')
         self.db.commit()
         # Past comparison is pegged to reported-at, not today's new traffic.
         a=wallets.wallet_report(self.db)[0]
-        self.assertEqual(a['comparison_gap'],2750)
-        self.assertEqual(a['estimated_balance'],4410750)
+        self.assertEqual(a['comparison_gap'],-2750)
+        self.assertEqual(a['estimated_balance'],4408000)
         # Volume historical records are still intact.
         self.assertEqual(self.db.execute('SELECT SUM(delta_down) FROM samples').fetchone()[0],5000000000)
+    def test_reconcile_multiple_times_money_and_signed_monthly_totals(self):
+        with patch.object(wallets,'utc_now',return_value='2026-10-14T01:01:00+00:00'):
+            aid=wallets.create_account(self.db,{'kind':'money','title':'Wallet',
+              'opening_amount':2300000})
+        with patch.object(wallets,'utc_now',return_value='2026-10-14T01:02:00+00:00'):
+            x=wallets.reconcile_balance(self.db,{'account_id':aid,'amount':2200000,
+                'note':'First bot comparison'})
+        self.assertEqual(x['adjustment'],-100000)
+        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],2200000)
+        with patch.object(wallets,'utc_now',return_value='2026-10-16T01:02:00+00:00'):
+            y=wallets.reconcile_balance(self.db,{'account_id':aid,'amount':2500000})
+        self.assertEqual(y['estimated_before'],2200000)
+        self.assertEqual(y['adjustment'],300000)
+        with patch.object(wallets,'utc_now',return_value='2026-10-17T01:02:00+00:00'):
+            z=wallets.reconcile_balance(self.db,{'account_id':aid,'amount':2400000})
+        self.assertEqual(z['adjustment'],-100000)
+        report=wallets.wallet_report(self.db)[0]
+        self.assertEqual(report['estimated_balance'],2400000)
+        self.assertEqual(report['adjustments'],100000)
+        self.assertEqual(report['reconciliation_summary'],
+            {'count':3,'positive':300000,'negative':200000,'net':100000})
+        self.assertEqual(len(report['reconciliation_history']),3)
+        self.assertEqual(report['reconciliation_history'][0]['note'],'')
+        self.assertEqual(report['reconciliation_history'][2]['note'],'First bot comparison')
+        self.assertEqual(self.db.execute('SELECT SUM(delta_down) FROM samples').fetchone()[0],3000000000)
+
+    def test_reconcile_quota_and_future_usage_keeps_correction(self):
+        with patch.object(wallets,'utc_now',return_value='2026-10-14T01:01:00+00:00'):
+            aid=wallets.create_account(self.db,{'kind':'volume','title':'Quota',
+                'opening_amount':230000000000})
+            wallets.attach_port(self.db,{'account_id':aid,'node_id':7,'port':47307,
+                'direction':'downlink','rate_rial_per_gb':0})
+        with patch.object(wallets,'utc_now',return_value='2026-10-14T01:01:30+00:00'):
+            receipt=wallets.reconcile_balance(self.db,{'account_id':aid,
+                  'amount':220000000000})
+        self.assertEqual(receipt['adjustment'],-10000000000)
+        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],220000000000)
+        self.poll(5000000000,500000000,'2026-10-14T01:02:00+00:00')
+        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],218000000000)
+        with patch.object(wallets,'utc_now',return_value='2026-10-14T01:03:00+00:00'):
+            wallets.add_credit(self.db,{'account_id':aid,'amount':10000000000})
+        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],228000000000)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM supplier_credits').fetchone()[0],1)
+
     def test_provider_uses_existing_metadata_and_legacy_balances(self):
         # Provider rate and direction are already known from ordinary port metadata.
         self.db.execute("""INSERT INTO metadata(node_id,port,provider,price_per_gb,bill_direction)
@@ -154,8 +198,8 @@ class WalletTests(unittest.TestCase):
             wallets.report_balance(self.db,{'account_id':volume,'amount':108000000000})
         self.db.commit()
         a=wallets.wallet_report(self.db)[0]
-        self.assertEqual(a['estimated_balance'],107500000000)
-        self.assertEqual(a['comparison_gap'],-500000000)
+        self.assertEqual(a['estimated_balance'],108000000000)
+        self.assertEqual(a['comparison_gap'],500000000)
         with self.assertRaises(ValueError):
             wallets.add_credit(self.db,{'account_id':volume,'amount':0})
         with self.assertRaises(ValueError):
