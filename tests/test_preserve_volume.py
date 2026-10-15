@@ -28,7 +28,7 @@ class PreserveVolumeTests(unittest.TestCase):
                 with db:
                     db.execute('UPDATE samples SET bill_bytes=0,rate_snapshot=0,cost=0')
                     db.execute('DELETE FROM metadata')
-                    db.execute('DELETE FROM settings')
+                    db.execute("DELETE FROM settings WHERE key!='traffic_unit'")
                     db.execute('DELETE FROM fixed_expenses')
                     db.execute('DELETE FROM poll_runs')
                 after=[tuple(x) for x in db.execute(
