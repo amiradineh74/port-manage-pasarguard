@@ -190,7 +190,8 @@ def dashboard(params):
                 'title':preferences['title'],'currency':preferences['currency'],
                 'timezone':preferences['timezone'],
                 'fixed_expenses':fixed_expenses,
-                'fixed_expenses_total_rial':fixed_total(fixed_expenses)}
+                'fixed_expenses_total_rial':fixed_total(fixed_expenses),
+                'wallets':wallet_report(db)}
 
 
 def csrf_for(token):return mac('csrf:'+token)
