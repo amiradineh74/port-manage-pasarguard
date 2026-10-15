@@ -3,7 +3,7 @@ const $=id=>document.getElementById(id);
 let state=null;
 let selectedProvider='__all__';
 const fmt=n=>new Intl.NumberFormat('fa-IR',{maximumFractionDigits:2}).format(n||0);
-const volumeUnit=()=>state?.traffic_unit==='GB'?'GB':volumeUnit();
+const volumeUnit=()=>state?.traffic_unit==='GB'?'GB':'GiB';
 const smallerUnit=()=>volumeUnit()==='GB'?'MB':'MiB';
 const bytesPerUnit=()=>volumeUnit()==='GB'?1e9:1024**3;
 const bytesPerSmallUnit=()=>volumeUnit()==='GB'?1e6:1024**2;
@@ -331,7 +331,7 @@ function walletInputNumber(field,kind){
  const n=Number($(field).value);
  if(!Number.isFinite(n)||n<0)throw Error('مقدار معتبر وارد کن.');
  if(kind==='money'&&!Number.isInteger(n))throw Error('مبلغ پولی را به صورت عدد صحیح و مطابق واحد پول پنل وارد کن.');
- const amount=Math.round(n*(kind==='money'?(isRial()?1:10):bytesPerGiB));
+ const amount=Math.round(n*(kind==='money'?(isRial()?1:10):bytesPerUnit()));
  if(!Number.isSafeInteger(amount)||amount<0)throw Error('مقدار خیلی بزرگ است.');
  return amount;
 }
