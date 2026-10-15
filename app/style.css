@@ -213,3 +213,67 @@ body dialog h2{padding-bottom:8px;border-bottom:1px solid var(--line)}
  .expense-formula{padding:10px;gap:4px}
  .expense-formula strong{width:100%}
 }
+
+
+/* Sidebar navigation v1: fixed at the right edge, separate from dashboard scroll.
+ * CSS-only layout; the mobile drawer uses only a few vanilla JS events. */
+@media(min-width:1120px){
+ body{padding-right:252px}
+ .section-nav{
+  position:fixed;inset:16px 16px 16px auto;
+  width:218px;height:auto;max-height:calc(100dvh - 32px);
+  z-index:90;display:flex;flex-direction:column;align-items:stretch;
+  gap:7px;padding:14px 10px;overflow-y:auto;overflow-x:hidden;
+  margin:0;border-radius:15px;scrollbar-width:thin;
+  box-shadow:0 10px 28px #0002
+ }
+ .section-nav a{width:100%;justify-content:flex-start;min-height:47px;padding:10px 13px}
+ .nav-toggle,.nav-backdrop{display:none!important}
+}
+.nav-heading{display:flex;flex-direction:column;gap:7px;
+ padding:14px 12px 16px;margin:0 0 5px;border-bottom:1px solid var(--line)}
+.nav-heading strong{font-size:15px;color:var(--text)}
+.nav-heading span{font-size:11px;letter-spacing:.3px;color:var(--muted);direction:ltr;text-align:right}
+.nav-toggle,.nav-backdrop{display:none}
+.section-nav a[aria-current="location"]{color:var(--text);background:var(--panel2);
+ border-color:var(--blue);font-weight:700}
+#overview,#providers-section,#ports-section,#manage,#expenses,#settings-section{
+ scroll-margin-top:18px
+}
+@media(max-width:1119px){
+ body{padding-right:0}
+ .section-nav{
+  position:fixed;inset:0 0 0 auto;width:min(82vw,286px);
+  min-height:100dvh;max-height:100dvh;height:100dvh;
+  margin:0;padding:18px 12px;z-index:102;
+  display:flex;flex-direction:column;align-items:stretch;gap:7px;
+  overflow-y:auto;overflow-x:hidden;border-radius:0;
+  border-top:0;border-bottom:0;border-right:0;
+  transform:translateX(102%);visibility:hidden;pointer-events:none;
+  transition:transform .18s ease,visibility 0s linear .18s;
+  box-shadow:-10px 0 30px #0005
+ }
+ .section-nav[data-open="true"]{
+  transform:translateX(0);visibility:visible;pointer-events:auto;
+  transition:transform .18s ease,visibility 0s
+ }
+ .section-nav a{width:100%;min-height:48px;justify-content:flex-start;font-size:14px;padding:10px 13px}
+ .nav-toggle{
+  position:fixed;bottom:max(16px,env(safe-area-inset-bottom));right:max(16px,env(safe-area-inset-right));
+  z-index:103;display:flex;align-items:center;justify-content:center;
+  min-height:48px;min-width:106px;padding:10px 16px;
+  background:var(--blue);color:#071525;border-color:var(--blue);
+  box-shadow:0 5px 22px #0005;font-weight:700
+ }
+ .nav-backdrop:not([hidden]){
+  display:block;position:fixed;inset:0;background:#0009;z-index:101;
+  cursor:default;border:0;border-radius:0;margin:0;padding:0
+ }
+ .wrap{padding-bottom:70px}
+ #overview,#providers-section,#ports-section,#manage,#expenses,#settings-section{
+  scroll-margin-top:14px
+ }
+}
+@media(prefers-reduced-motion:reduce){
+ .section-nav{transition:none!important}
+}
