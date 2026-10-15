@@ -32,18 +32,6 @@ except (ValueError,AssertionError):
     sys.exit(1)
 PY
 
-read -r -p "Public dashboard port [${CURRENT_PORT}]: " PORT
-PORT="${PORT:-$CURRENT_PORT}"
-[[ "$PORT" =~ ^[0-9]+$ ]] || fail 'Port must be numeric.'
-(( 1024 <= 10#$PORT && 10#$PORT <= 65535 )) || fail 'Port must be between 1024 and 65535.'
-PORT="$((10#$PORT))"
-
-CURRENT_HOST="$(python3 - "$CONFIG" <<'PY'
-import json,sys
-cfg=json.load(open(sys.argv[1], encoding='utf-8'))
-print(cfg['listen_host'])
-PY
-)"
 read -r CURRENT_SSL_CERT CURRENT_SSL_KEY < <(python3 - "$CONFIG" <<'PY'
 import json,sys
 cfg=json.load(open(sys.argv[1], encoding='utf-8'))
@@ -52,11 +40,50 @@ PY
 )
 [[ "$CURRENT_SSL_CERT" == NONE && "$CURRENT_SSL_KEY" == NONE ]] || fail 'Existing TLS configuration detected. Public HTTP setup will not disable it.'
 
-if [[ "$CURRENT_HOST" != '0.0.0.0' || "$PORT" != "$CURRENT_PORT" ]]; then
-  if ss -H -ltn "( sport = :$PORT )" | grep -q .; then
-    fail "Port $PORT is already in use. Choose another port."
+# PORT_SELECTION_START - keep prompting on invalid/occupied ports without touching config.
+# The current monitor's listener on 127.0.0.1 is not a port conflict: this
+# operation restarts that SAME service on 0.0.0.0, using its existing port.
+while true; do
+  SELECTED_PORT=''
+  if ! IFS= read -r -p "Public dashboard port [${CURRENT_PORT}]: " SELECTED_PORT; then
+    fail 'Port selection cancelled; monitoring configuration is unchanged.'
   fi
-fi
+  SELECTED_PORT="${SELECTED_PORT:-$CURRENT_PORT}"
+  if [[ ! "$SELECTED_PORT" =~ ^[0-9]{1,5}$ ]]; then
+    echo 'Invalid port. Enter a number between 1024 and 65535.'
+    continue
+  fi
+  PORT="$((10#$SELECTED_PORT))"
+  if (( PORT < 1024 || PORT > 65535 )); then
+    echo 'Invalid port. Enter a number between 1024 and 65535.'
+    continue
+  fi
+
+  # Read only. -p identifies owning PIDs, so our own already-running web
+  # service can safely reuse its configured port after systemctl restart.
+  LISTENERS="$(ss -H -ltnp "( sport = :$PORT )")" || fail 'Cannot check listening ports.'
+  if [[ -z "$LISTENERS" ]]; then
+    break
+  fi
+  MAIN_PID="$(systemctl show -p MainPID --value pgtraffic-web.service 2>/dev/null || true)"
+  OWN_PORT=yes
+  if [[ "$PORT" != "$CURRENT_PORT" || ! "$MAIN_PID" =~ ^[1-9][0-9]*$ ]]; then
+    OWN_PORT=no
+  else
+    while IFS= read -r LINE; do
+      if [[ "$LINE" != *"pid=${MAIN_PID},"* ]]; then
+        OWN_PORT=no
+        break
+      fi
+    done <<< "$LISTENERS"
+  fi
+  if [[ "$OWN_PORT" == yes ]]; then
+    echo "Port $PORT is already used by THIS monitor; it will be rebound when the monitor service restarts."
+    break
+  fi
+  echo "Port $PORT is occupied by another service. Choose a different port."
+done
+# PORT_SELECTION_END
 
 printf '\n=== Publish dashboard via public HTTP ===\n'
 printf 'URL:        http://%s:%s\n' "$IP" "$PORT"
