@@ -214,22 +214,38 @@ def add_credit(db,data):
                (account['id'],amount,utc_now(),note))
     return db.execute('SELECT last_insert_rowid()').fetchone()[0]
 
-def report_balance(db,data):
+def reconcile_balance(db,data):
+    """Append a signed correction without mutating recorded traffic or credits.
+
+    Caller holds a SQLite write transaction so the measured balance, journal
+    entry and provider-reported reference form one consistent snapshot.
+    """
+    if type(data) is not dict:raise ValueError('اطلاعات همسان‌سازی معتبر نیست')
     account=known_account(db,data.get('account_id'))
-    amount=require_int(data.get('amount'),'مانده اعلام‌شده',0)
+    reported=require_int(data.get('amount'),'مانده اعلام‌شده ربات',0)
+    note=text_field(data.get('note',''),'توضیح همسان‌سازی',250)
     now=utc_now()
-    bindings=[dict(r) for r in db.execute(
+    bindings=[dict(row) for row in db.execute(
         'SELECT * FROM supplier_ports WHERE account_id=?',(account['id'],))]
-    estimate=_estimate(db,account,bindings,now)['estimated_balance']
-    gap=estimate-amount
+    before=_estimate(db,account,bindings,now)['estimated_balance']
+    adjustment=reported-before     # signed: positive=bot had more; negative=bot had less
+    db.execute('''INSERT INTO supplier_reconciliations
+      (account_id,checked_at,reported_amount,estimated_before,adjustment,note)
+      VALUES(?,?,?,?,?,?)''',(account['id'],now,reported,before,adjustment,note))
     if account['kind']=='money':
         db.execute('UPDATE supplier_accounts SET reported_rial=?,reported_at=? WHERE id=?',
-                   (amount,now,account['id']))
+                   (reported,now,account['id']))
     else:
         db.execute('UPDATE supplier_accounts SET reported_bytes=?,reported_at=? WHERE id=?',
-                   (amount,now,account['id']))
-    db.execute('''INSERT INTO supplier_checks(account_id,checked_at,reported_amount,estimated_amount,difference)
-                  VALUES(?,?,?,?,?)''',(account['id'],now,amount,estimate,gap))
+                   (reported,now,account['id']))
+    # Return the adjustment for user feedback; no supplier bot is contacted.
+    return {'account_id':account['id'],'adjustment':adjustment,
+            'estimated_before':before,'reported_balance':reported,
+            'balance_after':reported}
+
+def report_balance(db,data):
+    """Backwards-compatible endpoint now performs a genuine synchronization."""
+    return reconcile_balance(db,data)
 
 def _estimate(db,account,bindings,until=None):
     spent_rial=0
@@ -275,9 +291,14 @@ def _estimate(db,account,bindings,until=None):
       (account['id'],account['started_at'],until) if until else
       (account['id'],account['started_at'])).fetchone()[0]
     initial=account['opening_rial'] if account['kind']=='money' else account['opening_bytes']
-    balance=int(initial)+int(credits)-(spent_rial if account['kind']=='money' else spent_bytes)
-    return {'estimated_balance':balance,'credited':int(credits),'used_bytes':spent_bytes,
-            'spent_rial':spent_rial,'ports':per_port}
+    adjustments=db.execute('''SELECT COALESCE(SUM(adjustment),0)
+        FROM supplier_reconciliations WHERE account_id=?'''+
+        (' AND checked_at<=?' if until else ''),
+        (account['id'],until) if until else (account['id'],)).fetchone()[0]
+    balance=int(initial)+int(credits)+int(adjustments)-(
+        spent_rial if account['kind']=='money' else spent_bytes)
+    return {'estimated_balance':balance,'credited':int(credits),'adjustments':int(adjustments),
+            'used_bytes':spent_bytes,'spent_rial':spent_rial,'ports':per_port}
 
 def wallet_report(db):
     accounts=[]
@@ -294,10 +315,24 @@ def wallet_report(db):
         reported=(account['reported_rial'] if a['kind']=='money' else account['reported_bytes'])
         checks=[dict(r) for r in db.execute(
             'SELECT * FROM supplier_checks WHERE account_id=? ORDER BY id DESC LIMIT 20',(a['id'],))]
-        comparison=checks[0]['difference'] if checks else None
+        history=[dict(r) for r in db.execute(
+            '''SELECT * FROM supplier_reconciliations WHERE account_id=?
+               ORDER BY checked_at DESC,id DESC LIMIT 2000''',(a['id'],))]
+        comparison=history[0]['adjustment'] if history else (
+            checks[0]['difference'] if checks else None)
+        totals=db.execute('''SELECT COUNT(*),
+          COALESCE(SUM(CASE WHEN adjustment>0 THEN adjustment ELSE 0 END),0),
+          COALESCE(SUM(CASE WHEN adjustment<0 THEN -adjustment ELSE 0 END),0),
+          COALESCE(SUM(adjustment),0)
+          FROM supplier_reconciliations WHERE account_id=?''',(a['id'],)).fetchone()
+        reconciliation_summary={'count':totals[0],'positive':totals[1],
+            'negative':totals[2],'net':totals[3]}
+
         credits=[dict(r) for r in db.execute(
             'SELECT * FROM supplier_credits WHERE account_id=? ORDER BY id DESC LIMIT 20',(a['id'],))]
         accounts.append(dict(account,**result,reported_balance=reported,
                              comparison_gap=comparison,credit_history=credits,
-                             check_history=checks))
+                             check_history=checks,
+                             reconciliation_history=history,
+                             reconciliation_summary=reconciliation_summary))
     return accounts
