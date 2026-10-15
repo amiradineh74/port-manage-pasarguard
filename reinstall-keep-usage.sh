@@ -73,6 +73,7 @@ with sqlite3.connect(str(source),timeout=30) as db:
     db.execute('DELETE FROM metadata')
     db.execute('DELETE FROM settings')
     db.execute('DELETE FROM fixed_expenses')
+    db.execute('DELETE FROM supplier_checks')
     db.execute('DELETE FROM supplier_credits')
     db.execute('DELETE FROM supplier_ports')
     db.execute('DELETE FROM supplier_accounts')
