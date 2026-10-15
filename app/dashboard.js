@@ -426,4 +426,32 @@ $('chart-scale').addEventListener('change',renderProviderPanels);$('search').add
 $('display-form').addEventListener('submit',saveDisplaySettings);
 $('editform').addEventListener('submit',save);$('cancel').addEventListener('click',()=>$('edit').close());
 $('logout').addEventListener('click',async()=>{if(!state){location.href='/login';return;}await fetch('/api/logout',{method:'POST',headers:{'X-CSRF-Token':state.csrf}});location.href='/login';});
+
+function setNavigationOpen(open){
+ const nav=$('main-nav');
+ nav.dataset.open=open?'true':'false';
+ $('nav-toggle').setAttribute('aria-expanded',String(open));
+ $('nav-toggle').textContent=open?'✕ بستن':'☰ بخش‌ها';
+ $('nav-backdrop').hidden=!open;
+}
+function highlightSection(href){
+ document.querySelectorAll('.section-nav a').forEach(link=>{
+  if(link.getAttribute('href')===href)link.setAttribute('aria-current','location');
+  else link.removeAttribute('aria-current');
+ });
+}
+$('nav-toggle').addEventListener('click',()=>setNavigationOpen($('main-nav').dataset.open!=='true'));
+$('nav-backdrop').addEventListener('click',()=>setNavigationOpen(false));
+document.querySelectorAll('.section-nav a').forEach(link=>{
+ link.addEventListener('click',()=>{
+  highlightSection(link.getAttribute('href'));
+  setNavigationOpen(false);
+ });
+});
+document.addEventListener('keydown',e=>{
+ if(e.key==='Escape'&&$('main-nav').dataset.open==='true')setNavigationOpen(false);
+});
+setNavigationOpen(false);
+highlightSection(location.hash||'#overview');
+
 reload();
