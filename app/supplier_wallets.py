@@ -83,21 +83,32 @@ def provider_paths(db,provider):
           WHERE m.provider=? ORDER BY p.node_id,p.port''',(provider,))]
 
 def sync_provider_port(db,provider,node_id,port,direction,rate_toman):
-    """Bind a freshly configured port without rewriting old sample checkpoints."""
+    """Track an existing provider port and start new rates prospectively."""
     association=db.execute(
         'SELECT account_id FROM provider_wallet_links WHERE provider=?',(provider,)).fetchone()
     if not association:return
     account_id=association['account_id']
-    existing=db.execute('SELECT account_id FROM supplier_ports WHERE node_id=? AND port=?',
-                        (node_id,port)).fetchone()
-    if existing:
-        if existing['account_id']!=account_id:
-            raise ValueError('این پورت قبلاً به کیف پول دیگری متصل شده؛ ابتدا اتصال قبلی را بررسی کنید')
-        return
     account=known_account(db,account_id)
     if direction not in DIRECTIONS:raise ValueError('جهت ترافیک نامعتبر است')
     rate=0 if account['kind']=='volume' else int((
         Decimal(str(rate_toman))*Decimal(10)).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
+    existing=db.execute('SELECT * FROM supplier_ports WHERE node_id=? AND port=?',
+                        (node_id,port)).fetchone()
+    if existing:
+        if existing['account_id']!=account_id:
+            raise ValueError('این پورت قبلاً به کیف پول دیگری متصل شده؛ ابتدا اتصال قبلی را بررسی کنید')
+        latest=db.execute('''SELECT direction,rate_rial_per_gb FROM supplier_port_terms
+           WHERE binding_id=? ORDER BY started_at DESC,id DESC LIMIT 1''',
+           (existing['id'],)).fetchone()
+        last_dir=latest['direction'] if latest else existing['direction']
+        last_rate=latest['rate_rial_per_gb'] if latest else existing['rate_rial_per_gb']
+        if last_dir!=direction or last_rate!=rate:
+            db.execute('''INSERT INTO supplier_port_terms
+              (binding_id,started_at,direction,rate_rial_per_gb) VALUES(?,?,?,?)
+              ON CONFLICT(binding_id,started_at) DO UPDATE SET
+              direction=excluded.direction,rate_rial_per_gb=excluded.rate_rial_per_gb''',
+              (existing['id'],utc_now(),direction,rate))
+        return
     db.execute('''INSERT INTO supplier_ports
        (account_id,node_id,port,started_at,direction,rate_rial_per_gb)
        VALUES(?,?,?,?,?,?)''',(account_id,node_id,port,utc_now(),direction,rate))
@@ -173,20 +184,38 @@ def _estimate(db,account,bindings,until=None):
     spent_bytes=0
     per_port=[]
     for row in bindings:
-        params=[row['node_id'],row['port'],row['started_at']]
-        upper=''
-        if until:
-            upper=' AND collected_at<=?'
-            params.append(until)
-        usage=db.execute('''SELECT COALESCE(SUM(delta_down),0),COALESCE(SUM(delta_up),0)
-          FROM samples WHERE node_id=? AND port=? AND collected_at>=?'''+upper,params).fetchone()
-        down,up=int(usage[0]),int(usage[1])
-        bill={'downlink':down,'uplink':up,'both':down+up}[row['direction']]
-        charge=int((Decimal(bill)*Decimal(row['rate_rial_per_gb'])/Decimal(10**9))
-                   .quantize(Decimal('1'),rounding=ROUND_HALF_UP))
-        spent_bytes+=bill
-        spent_rial+=charge
-        per_port.append(dict(row,down_bytes=down,up_bytes=up,billed_bytes=bill,charge_rial=charge))
+        terms=[{'started_at':row['started_at'],
+                'direction':row['direction'],'rate_rial_per_gb':row['rate_rial_per_gb']}]
+        history=db.execute('''SELECT started_at,direction,rate_rial_per_gb
+            FROM supplier_port_terms WHERE binding_id=? ORDER BY started_at,id''',
+            (row['id'],)).fetchall()
+        for term in history:
+            if not until or term['started_at']<=until:
+                terms.append(dict(term))
+        port_down=port_up=port_bill=port_charge=0
+        for index,term in enumerate(terms):
+            lower=max(row['started_at'],term['started_at'])
+            upper=terms[index+1]['started_at'] if index+1<len(terms) else None
+            if until and lower>until:continue
+            filters=['node_id=?','port=?','collected_at>=?']
+            params=[row['node_id'],row['port'],lower]
+            if upper:
+                filters.append('collected_at<?');params.append(upper)
+            if until:
+                filters.append('collected_at<=?');params.append(until)
+            down,up=db.execute('''SELECT COALESCE(SUM(delta_down),0),
+                COALESCE(SUM(delta_up),0) FROM samples WHERE '''+
+                ' AND '.join(filters),params).fetchone()
+            down,up=int(down),int(up)
+            billed={'downlink':down,'uplink':up,'both':down+up}[term['direction']]
+            charge=int((Decimal(billed)*Decimal(term['rate_rial_per_gb'])/Decimal(10**9))
+                       .quantize(Decimal('1'),rounding=ROUND_HALF_UP))
+            port_down+=down;port_up+=up;port_bill+=billed;port_charge+=charge
+        spent_bytes+=port_bill;spent_rial+=port_charge
+        last=terms[-1]
+        per_port.append(dict(row,down_bytes=port_down,up_bytes=port_up,
+                 billed_bytes=port_bill,charge_rial=port_charge,
+                 direction=last['direction'],rate_rial_per_gb=last['rate_rial_per_gb']))
     credits=db.execute('''SELECT COALESCE(SUM(amount),0) FROM supplier_credits
       WHERE account_id=? AND created_at>=?'''+(' AND created_at<=?' if until else ''),
       (account['id'],account['started_at'],until) if until else
