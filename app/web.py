@@ -431,6 +431,12 @@ class Handler(BaseHTTPRequestHandler):
                 with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
                     known=db.execute('SELECT 1 FROM port_state WHERE node_id=? AND port=?',(nid,port)).fetchone()
                     if not known:raise ValueError('پورت در آمار یافت نشد')
+                    linked=db.execute('''SELECT l.provider FROM supplier_ports b
+                        JOIN provider_wallet_links l ON b.account_id=l.account_id
+                        WHERE b.node_id=? AND b.port=?''',(nid,port)).fetchone()
+                    if linked and linked['provider']!=provider:
+                        raise ValueError('این پورت به کیف پول ارائه‌دهنده «'+
+                            linked['provider']+'» متصل است. تغییر نام ارائه‌دهنده پس از اتصال کیف پول نیاز به انتقال کنترل‌شده اعتبار دارد.')
                     with db:
                         db.execute('''INSERT INTO metadata(node_id,port,title,provider,price_per_gb,bill_direction,enabled,notes,billing_since)
                          VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(node_id,port) DO UPDATE SET
