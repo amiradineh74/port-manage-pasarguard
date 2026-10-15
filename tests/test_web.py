@@ -50,6 +50,52 @@ class WebTests(unittest.TestCase):
         self.assertEqual(st,303)
         return h['Set-Cookie'].split(';')[0]
 
+    def test_provider_wallet_uses_preconfigured_ports_and_preserves_usage(self):
+        from unittest.mock import patch
+        import supplier_wallets
+        cookie=self.login()
+        st,_,raw=self.request('GET','/api/dashboard?from=2026-10-13&to=2026-10-13',
+                               headers={'Cookie':cookie})
+        csrf=json.loads(raw)['csrf']
+        hdr={'Cookie':cookie,'Content-Type':'application/json','X-CSRF-Token':csrf}
+        with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+            before=tuple(db.execute('SELECT COUNT(*),COALESCE(SUM(delta_down),0) FROM samples').fetchone())
+            sample={'nodes':[{'node_id':77,'node_name':'SupplierNode','address':'192.0.2.77',
+                 'ports':[{'port':55003,'tag':'supplier-port','uplink':0,'downlink':1000000000}]}],
+                 'errors':[]}
+            insert_poll(db,sample,'2026-10-13T00:00:00+00:00',web.CFG)
+            db.execute("""INSERT INTO metadata(node_id,port,provider,price_per_gb,bill_direction)
+                        VALUES(77,55003,'InvoiceBot',1200,'downlink')""")
+            db.commit()
+        with patch.object(supplier_wallets,'utc_now',return_value='2026-10-13T00:00:30+00:00'):
+            obj={'provider':'InvoiceBot','kind':'money','opening_amount':2437750}
+            st,_,raw=self.request('POST','/api/providers/wallet',json.dumps(obj),hdr)
+            self.assertEqual(st,200)
+            wallet_id=json.loads(raw)['id']
+            st,_,_=self.request('POST','/api/providers/wallet',json.dumps(obj),hdr)
+            self.assertEqual(st,400)
+        with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+            sample['nodes'][0]['ports'][0]['downlink']=3000000000
+            insert_poll(db,sample,'2026-10-13T00:01:00+00:00',web.CFG)
+        st,_,raw=self.request('GET','/api/wallets',headers={'Cookie':cookie})
+        self.assertEqual(st,200)
+        w=next(x for x in json.loads(raw)['accounts'] if x['id']==wallet_id)
+        self.assertEqual(w['provider'],'InvoiceBot')
+        self.assertEqual(len(w['ports']),1)
+        self.assertEqual(w['ports'][0]['rate_rial_per_gb'],12000)
+        self.assertEqual(w['estimated_balance'],2413750)
+        # A wallet-bound port cannot be silently assigned to another provider.
+        rename={'node_id':77,'port':55003,'title':'test','provider':'OtherProvider',
+                'bill_direction':'downlink','price_per_gb':1200,'enabled':True}
+        st,_,_=self.request('POST','/api/metadata',json.dumps(rename),hdr)
+        self.assertEqual(st,400)
+        with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+            retained=tuple(db.execute('SELECT COUNT(*),COALESCE(SUM(delta_down),0) FROM samples').fetchone())
+            current=db.execute('SELECT provider FROM metadata WHERE node_id=77 AND port=55003').fetchone()[0]
+            self.assertEqual(current,'InvoiceBot')
+            self.assertEqual(retained[0],before[0]+2)
+            self.assertEqual(retained[1],before[1]+2000000000)
+
     def test_supplier_wallet_management_http_isolated_and_csrf(self):
         from unittest.mock import patch
         import supplier_wallets
