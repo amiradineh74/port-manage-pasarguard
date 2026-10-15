@@ -52,10 +52,25 @@ PY
 )
 [[ "$CURRENT_SSL_CERT" == NONE && "$CURRENT_SSL_KEY" == NONE ]] || fail 'Existing TLS configuration detected. Public HTTP setup will not disable it.'
 
-if [[ "$CURRENT_HOST" != '0.0.0.0' || "$PORT" != "$CURRENT_PORT" ]]; then
-  if ss -H -ltn "( sport = :$PORT )" | grep -q .; then
-    fail "Port $PORT is already in use. Choose another port."
+# A first-time publication legitimately reuses the current web listener:
+# pgtraffic-web already binds 127.0.0.1:CURRENT_PORT. A listener owned by
+# another service (or an unidentifiable PID) must still block publication.
+# Check every listener, including those bound to another interface.
+LISTENERS="$(ss -H -ltnp "( sport = :$PORT )")"
+if [[ -n "$LISTENERS" ]]; then
+  OWNER_PID=''
+  if [[ "$PORT" == "$CURRENT_PORT" ]] && systemctl is-active --quiet pgtraffic-web.service; then
+    OWNER_PID="$(systemctl show -p MainPID --value pgtraffic-web.service)"
   fi
+  if [[ ! "$OWNER_PID" =~ ^[1-9][0-9]*$ ]]; then
+    fail "Port $PORT is already in use by an unverified service. Choose another port."
+  fi
+  while IFS= read -r LISTENER; do
+    if [[ "$LISTENER" != *"pid=$OWNER_PID,"* ]]; then
+      fail "Port $PORT has a listener not owned by pgtraffic-web.service. Choose another port."
+    fi
+  done <<< "$LISTENERS"
+  echo "Port $PORT is already bound by this dashboard; it can be reused safely."
 fi
 
 printf '\n=== Publish dashboard via public HTTP ===\n'
