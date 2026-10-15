@@ -331,6 +331,44 @@ function walletInputNumber(field,kind){
  if(!Number.isSafeInteger(amount)||amount<0)throw Error('مقدار خیلی بزرگ است.');
  return amount;
 }
+function walletMonth(time){
+ const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:state.timezone||'Asia/Tehran',
+    year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(time))
+   .filter(p=>['year','month','day'].includes(p.type)).map(p=>[p.type,p.value]));
+ const [y,m]=Jalali.fromISO(parts.year+'-'+parts.month+'-'+parts.day);
+ return y+'/'+String(m).padStart(2,'0');
+}
+function walletReconciliationHistory(a){
+ const history=a.reconciliation_history||[];
+ const all=a.reconciliation_summary||{count:0,positive:0,negative:0,net:0};
+ const months=new Map();
+ for(const entry of history){
+  const key=walletMonth(entry.checked_at);
+  if(!months.has(key))months.set(key,{positive:0,negative:0,net:0,count:0});
+  const m=months.get(key),delta=Number(entry.adjustment);
+  m.positive+=Math.max(0,delta);m.negative+=Math.max(0,-delta);m.net+=delta;m.count++;
+ }
+ const row=m=>'<span>ربات بیشتر: +'+walletAmount(m.positive,a.kind)+'</span>'+
+  '<span>ربات کمتر: −'+walletAmount(m.negative,a.kind)+'</span>'+
+  '<span>اختلاف خالص: '+(m.net>0?'+':'')+walletAmount(m.net,a.kind)+'</span>';
+ const monthRows=[...months.entries()].sort((x,y)=>y[0].localeCompare(x[0]))
+   .map(([key,m])=>'<div class="wallet-month"><strong>'+escapeHtml(persianDigits(key))+
+       ' · '+persianDigits(m.count)+' نوبت</strong>'+row(m)+'</div>').join('');
+ const checks=history.map(h=>'<tr><td>'+escapeHtml(walletDate(h.checked_at))+
+    '</td><td>'+walletAmount(h.estimated_before,a.kind)+'</td>'+
+    '<td>'+walletAmount(h.reported_amount,a.kind)+'</td>'+
+    '<td>'+ (h.adjustment>0?'+':'')+walletAmount(h.adjustment,a.kind)+'</td>'+
+    '<td>'+escapeHtml(h.note||'—')+'</td></tr>').join('');
+ return '<details class="wallet-reconciliations"><summary>تاریخچه همسان‌سازی ('+
+   persianDigits(all.count)+' بار)</summary>'+
+   '<p class="sub">اختلاف مثبت یعنی مانده ربات بیشتر بوده؛ منفی یعنی کمتر بوده. این اصلاحات، مصرف و شارژ قبلی را حذف نمی‌کنند.</p>'+
+   '<div class="wallet-month"><strong>جمع کل همسان‌سازی‌ها</strong>'+row(all)+'</div>'+
+   monthRows+
+   '<div class="table-scroll"><table><thead><tr><th>تاریخ</th><th>مانده پیش از اصلاح</th>'+
+   '<th>مانده ربات</th><th>اختلاف اصلاح‌شده</th><th>توضیح</th></tr></thead>'+
+   '<tbody>'+ (checks||'<tr><td colspan="5">هنوز همسان‌سازی ثبت نشده است.</td></tr>')+
+   '</tbody></table></div></details>';
+}
 function providerWalletDetails(name){
  if(name==='__all__'||name==='بدون ارائه‌دهنده')return '';
  const accounts=walletsForProvider(name);
@@ -347,11 +385,12 @@ function providerWalletDetails(name){
    '<div class="provider-credit-total"><span>مانده تخمینی</span><strong>'+
    walletAmount(a.estimated_balance,a.kind)+'</strong></div>'+
    '<small>ابتدا: '+walletAmount(opening,a.kind)+' · شارژ: '+walletAmount(a.credited,a.kind)+'</small>'+
+   '<small>اصلاح موجودی: '+(a.adjustments>0?'+':'')+walletAmount(a.adjustments||0,a.kind)+'</small>'+
    '<small>کسر شده: '+walletAmount(usage,a.kind)+' · پورت‌های فعال: '+active.length+'</small>'+
    reported+
    '<div class="provider-credit-actions"><button class="minor provider-credit-edit" data-id="'+a.id+'" data-provider="'+escapeHtml(name)+'" type="button">مدیریت پورت‌ها</button>'+
    '<button class="minor provider-credit-topup" data-id="'+a.id+'" type="button">شارژ / خرید حجم</button>'+
-   '<button class="minor provider-credit-check" data-id="'+a.id+'" type="button">ثبت مانده ربات</button></div>'+
+   '<button class="minor provider-credit-check" data-id="'+a.id+'" type="button">همسان‌سازی موجودی</button></div>'+
    '<details class="wallet-history"><summary>سابقه پورت‌ها و تراکنش‌ها</summary>'+
     a.ports.map(p=>'<p class="sub">'+escapeHtml(p.node_name||('Node '+p.node_id))+' / '+p.port+
      (p.ended_at?' · اتصال پایان‌یافته':' · فعال')+
@@ -360,7 +399,7 @@ function providerWalletDetails(name){
     (a.credit_history||[]).map(t=>'<p class="sub">شارژ '+walletAmount(t.amount,a.kind)+' — '+escapeHtml(walletDate(t.created_at))+'</p>').join('')+
     (a.check_history||[]).map(t=>'<p class="sub">مقایسه · مانده ربات '+walletAmount(t.reported_amount,a.kind)+
      ' · اختلاف '+walletAmount(t.difference,a.kind)+' — '+escapeHtml(walletDate(t.checked_at))+'</p>').join('')+
-   '</details></article>';
+   '</details>'+walletReconciliationHistory(a)+'</article>';
  }).join('');
  return '<div class="provider-credit">'+cards+
    '<button type="button" class="minor provider-credit-create" data-provider="'+escapeHtml(name)+'">+ حساب اعتبار جدید</button></div>';
@@ -437,6 +476,7 @@ function openWalletDialog(type,id){
   $('wallet-reported-account').value=String(id);
   $('wallet-reported-unit').textContent=a.kind==='money'?unit():'GB';
   $('wallet-reported-amount').value='';
+  $('wallet-reported-note').value='';
   $('wallet-reported-dialog').showModal();
  }
 }
@@ -492,9 +532,11 @@ function installWalletForms(){
   return {account_id:a.id,amount:walletInputNumber('wallet-credit-amount',a.kind),
    note:$('wallet-credit-note').value};
  },'wallet-credit-dialog'));
- $('wallet-reported-form').addEventListener('submit',e=>saveWalletRequest(e,'/api/wallets/reported',()=>{
+ $('wallet-reported-form').addEventListener('submit',e=>saveWalletRequest(e,'/api/wallets/reconcile',()=>{
   const a=walletById($('wallet-reported-account').value);if(!a)throw Error('حساب پیدا نشد');
-  return {account_id:a.id,amount:walletInputNumber('wallet-reported-amount',a.kind)};
+  if(!confirm('مانده حساب «'+a.title+'» با مبلغ/حجم ربات همسان شود و اختلاف برای حسابرسی ذخیره شود؟'))throw Error('همسان‌سازی لغو شد');
+  return {account_id:a.id,amount:walletInputNumber('wallet-reported-amount',a.kind),
+   note:$('wallet-reported-note').value.trim()};
  },'wallet-reported-dialog'));
 }
 function renderExpenses(){
