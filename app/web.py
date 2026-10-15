@@ -19,6 +19,8 @@ from zoneinfo import ZoneInfo
 
 from storage import connect
 from fixed_costs import validate_expense, expenses_report, fixed_total
+from supplier_wallets import (wallet_report,create_account,update_account,attach_port,
+    add_credit,report_balance)
 
 CFG = None
 ROOT = Path(__file__).resolve().parent
@@ -244,6 +246,9 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/dashboard.js':return self.send_bytes(html_response('dashboard.js'),ctype='application/javascript; charset=utf-8')
         if path=='/jalali.js':return self.send_bytes(html_response('jalali.js'),ctype='application/javascript; charset=utf-8')
         if path=='/style.css':return self.send_bytes(html_response('style.css'),ctype='text/css; charset=utf-8')
+        if path=='/api/wallets':
+            with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
+                return self.send_json({'accounts':wallet_report(db)})
         if path=='/api/dashboard':
             try:
                 params=parse_qs(urlsplit(self.path).query)
@@ -281,6 +286,29 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({'error':'خطای تأیید درخواست'},403)
         if path=='/api/logout':
             return self.redirect('/login',{'Set-Cookie':'pgtraffic_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict'})
+        # These mutations affect only this independent monitor's SQLite,
+        # never PasarGuard accounts, bots, or live Xray quota counters.
+        if path in ('/api/wallets/create','/api/wallets/edit',
+                    '/api/wallets/attach','/api/wallets/credit',
+                    '/api/wallets/reported'):
+            try:
+                payload=json.loads(self.read_body())
+                if type(payload) is not dict:raise ValueError('درخواست نامعتبر است')
+                handlers={
+                  '/api/wallets/create':create_account,
+                  '/api/wallets/edit':update_account,
+                  '/api/wallets/attach':attach_port,
+                  '/api/wallets/credit':add_credit,
+                  '/api/wallets/reported':report_balance,
+                }
+                with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
+                    with db:
+                        result=handlers[path](db,payload)
+                return self.send_json({'ok':True,'id':result})
+            except (ValueError,TypeError,KeyError,OverflowError) as err:
+                return self.send_json({'error':str(err)},400)
+            except __import__('sqlite3').IntegrityError:
+                return self.send_json({'error':'این اتصال یا اطلاعات از قبل ثبت شده است'},400)
         if path=='/api/visible-ports':
             try:
                 obj=json.loads(self.read_body())
