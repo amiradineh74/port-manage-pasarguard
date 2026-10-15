@@ -317,7 +317,7 @@ class Handler(BaseHTTPRequestHandler):
                 with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
                     with db:
                         result=handlers[path](db,payload)
-                return self.send_json({'ok':True,'result':result})
+                return self.send_json({'ok':True,'id':result if type(result) is int else result.get('account_id'), 'result':result})
             except (ValueError,TypeError,KeyError,OverflowError) as err:
                 return self.send_json({'error':str(err)},400)
             except __import__('sqlite3').IntegrityError:
