@@ -73,42 +73,90 @@ def list_nodes(panel_container, panel_python):
 
 
 
-def running_container_names():
-    """Read only Docker metadata; never start, stop or configure containers."""
+def running_docker_containers():
+    """Read running container names only; no Docker or panel state is changed."""
     result=subprocess.run(['docker','ps','--format','{{.Names}}'],
         capture_output=True,text=True,timeout=10,check=False)
     if result.returncode:
-        raise RuntimeError('Cannot list running Docker containers (docker ps).')
-    return [name.strip() for name in result.stdout.splitlines() if name.strip()]
+        raise RuntimeError('Could not list running Docker containers. '
+                           'Check Docker access and run: docker ps --format "{{.Names}}"')
+    return sorted({name.strip() for name in result.stdout.splitlines() if name.strip()})
 
 
-def select_panel_container(cfg):
-    """Auto-select an unambiguous PasarGuard candidate; otherwise ask by number."""
-    names=running_container_names()
-    matches=[n for n in names if 'pasarguard' in n.lower()]
-    if len(matches)==1:
-        print('Auto-detected PasarGuard container:',matches[0])
-        return matches[0]
+def probable_pasarguard_panel(name):
+    """Suggest likely app containers, not PasarGuard's database/Redis/node services."""
+    import re
+    tokens=set(re.split(r'[-_.]+',name.lower()))
+    if 'pasarguard' not in tokens:
+        return False
+    non_panels={'db','database','mysql','mariadb','postgres','postgresql',
+                'redis','cache','node','xray','nginx','proxy','worker'}
+    return not bool(tokens & non_panels)
+
+
+def discover_panel_connection(cfg):
+    """Let users choose a detected container and verify it with a SELECT-only probe.
+
+    Never guess a running container if the panel is ambiguous. A wrong selection
+    is retried instead of exiting setup or writing incomplete config.json.
+    """
+    try:
+        names=running_docker_containers()
+    except (OSError,subprocess.TimeoutExpired,RuntimeError) as exc:
+        raise SystemExit('Cannot discover Docker containers: '+str(exc)) from exc
     if not names:
-        raise RuntimeError('No running Docker containers found.')
-    candidates=matches if matches else names
-    if matches:
-        print('Multiple possible PasarGuard containers found:')
+        raise SystemExit('No running Docker containers detected. '
+                         'Start the existing PasarGuard panel separately and retry.')
+
+    candidates=[name for name in names if probable_pasarguard_panel(name)]
+    preferred=cfg.get('panel_container')
+    suggested=(preferred if preferred in names else
+               candidates[0] if len(candidates)==1 else '')
+    print('\n=== Running Docker containers (read-only docker ps) ===')
+    for index,name in enumerate(names,1):
+        hint=' [possible PasarGuard panel]' if name in candidates else ''
+        print('%s) %s%s' % (index,name,hint))
+    if suggested:
+        print('Suggested PasarGuard panel: '+suggested)
     else:
-        print('No container name contains PasarGuard; select the panel container:')
-    for i,name in enumerate(candidates,1):
-        print('  %d) %s' % (i,name))
-    print('  0) Enter a different container name')
+        print('Multiple/no obvious panels: choose a container number from the list.')
+    print('This is NOT the dashboard title. Dashboard title is asked later.')
+    print('Manual lookup: docker ps --format "table {{.Names}}\\t{{.Status}}"')
     while True:
-        answer=input('Panel container number [required]: ').strip()
-        if answer=='0':
-            manual=input('Exact panel container name: ').strip()
-            if manual in names:return manual
-            print('That name is not among running containers.')
-        elif answer.isdigit() and 1<=int(answer)<=len(candidates):
-            return candidates[int(answer)-1]
+        answer=input('Select PasarGuard panel container (number/name)%s: ' %
+                     (' ['+suggested+']' if suggested else '')).strip()
+        if not answer:
+            if not suggested:
+                print('Select a number or exact container name from the list.')
+                continue
+            selected=suggested
+        elif answer.isdecimal():
+            n=int(answer)
+            if not 1<=n<=len(names):
+                print('Invalid number. Choose a listed container.')
+                continue
+            selected=names[n-1]
+        elif answer in names:
+            selected=answer
         else:
-            print('Choose a listed number (or 0 to enter the name).')
+            print('Unknown container. Select a listed Docker name, not a new dashboard name.')
+            continue
+
+        interpreter=ask('Python path inside selected container',
+                        cfg.get('panel_python',DEFAULT['panel_python']),
+                        lambda p:p.startswith('/') and ' ' not in p)
+        print('Checking PasarGuard node list (SELECT only; no changes)...')
+        try:
+            nodes=list_nodes(selected,interpreter)
+        except (OSError,subprocess.TimeoutExpired,RuntimeError) as exc:
+            print('Could not read nodes from '+selected+': '+str(exc))
+            print('Choose another listed container or check its Python path.')
+            continue
+        cfg['panel_container']=selected
+        cfg['panel_python']=interpreter
+        print('Verified read-only panel access:',selected)
+        return nodes
+
 
 def choose_nodes(cfg, nodes):
     """Require explicit node choice; selection is bound to stable node IDs."""
@@ -155,16 +203,7 @@ def main():
         shutil.copy2(dest,backup)
         print('Backup saved:',backup)
     print('\n=== Interactive setup | Main settings ===\n')
-    # For first-time installs, autodetect Docker container without user knowledge.
-    # If ambiguous, show an indexed list; no Docker or PasarGuard mutation.
-    try:
-        cfg['panel_container']=select_panel_container(cfg)
-        cfg['panel_python']=ask('Python path inside PasarGuard container (Enter for default)',
-                                cfg['panel_python'])
-        print('Reading available nodes from PasarGuard (read-only)...')
-        nodes=list_nodes(cfg['panel_container'],cfg['panel_python'])
-    except (OSError,subprocess.TimeoutExpired,RuntimeError) as exc:
-        raise SystemExit('Node discovery failed: %s No settings were saved.' % exc)
+    nodes=discover_panel_connection(cfg)
     choose_nodes(cfg,nodes)
     cfg['data_dir']=ask('Independent database directory',cfg['data_dir'],lambda s:s.startswith('/'))
     cfg['poll_interval']=ask('Collection interval in seconds (minimum 60)',cfg['poll_interval'],lambda n:60<=n<=86400,int)
