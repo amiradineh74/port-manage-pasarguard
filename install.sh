@@ -5,10 +5,20 @@ set -Eeuo pipefail
 for c in python3 docker systemctl install useradd; do command -v "$c" >/dev/null || { echo "Missing required command: $c"; exit 1; }; done
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "$ROOT/app/collector.py" ]] || { echo 'The app directory was not found next to install.sh.'; exit 1; }
-read -r -p 'Installation directory (no spaces) [/opt/pg-traffic-monitor]: ' INSTALL_DIR
-INSTALL_DIR="${INSTALL_DIR:-/opt/pg-traffic-monitor}"
-[[ "$INSTALL_DIR" =~ ^/[a-zA-Z0-9_./-]+$ ]] || { echo 'The directory must be an absolute path without spaces.'; exit 1; }
-[[ "$INSTALL_DIR" != '/' ]] || exit 1
+# Prompt until the input is valid: an accidental terminal arrow-key escape
+# sequence must not terminate an otherwise safe interactive installation.
+while true; do
+  INSTALL_DIR=''
+  if ! IFS= read -r -p 'Installation directory (no spaces) [/opt/pg-traffic-monitor]: ' INSTALL_DIR; then
+    echo 'Installation cancelled; no files have been changed.' >&2
+    exit 1
+  fi
+  INSTALL_DIR="${INSTALL_DIR:-/opt/pg-traffic-monitor}"
+  if [[ "$INSTALL_DIR" =~ ^/[a-zA-Z0-9_./-]+$ && "$INSTALL_DIR" != '/' ]]; then
+    break
+  fi
+  echo 'Invalid directory. Enter an absolute path (e.g. /opt/pg-traffic-monitor), or press Enter for default.' >&2
+done
 if [[ -e "$INSTALL_DIR/app/collector.py" ]];then
   read -r -p 'An installation exists. Update the application files? [y/N]: ' q
   [[ "$q" =~ ^[Yy]$ ]] || exit 0
