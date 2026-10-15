@@ -286,7 +286,7 @@ function renderExpenseCosts(trafficCost){
  $('expenses-scope-note').textContent='مبلغ ثابت در خلاصه بالا: '+money(rial/10)+' — '+context;
 }
 function walletAmount(value,kind){
- if(kind==='money')return new Intl.NumberFormat('fa-IR',{maximumFractionDigits:0}).format(Math.round(value/10))+' تومان';
+ if(kind==='money')return rialFormatter.format(Math.round(isRial()?value:value/10))+' '+unit();
  return new Intl.NumberFormat('fa-IR',{maximumFractionDigits:3}).format(value/1e9)+' GB';
 }
 function walletDate(utc){
@@ -300,8 +300,8 @@ function walletForProvider(provider){return wallets().find(a=>a.provider===provi
 function walletInputNumber(field,kind){
  const n=Number($(field).value);
  if(!Number.isFinite(n)||n<0)throw Error('مقدار معتبر وارد کن.');
- if(kind==='money'&&!Number.isInteger(n))throw Error('مبلغ تومانی را به صورت عدد صحیح وارد کن.');
- const amount=Math.round(n*(kind==='money'?10:1e9));
+ if(kind==='money'&&!Number.isInteger(n))throw Error('مبلغ پولی را به صورت عدد صحیح و مطابق واحد پول پنل وارد کن.');
+ const amount=Math.round(n*(kind==='money'?(isRial()?1:10):1e9));
  if(!Number.isSafeInteger(amount)||amount<0)throw Error('مقدار خیلی بزرگ است.');
  return amount;
 }
@@ -343,7 +343,7 @@ function refreshProviderWalletForm(){
  $('provider-wallet-existing-wrap').hidden=!existing;
  $('provider-wallet-new-wrap').hidden=existing;
  $('provider-wallet-opening').required=!existing;
- $('provider-wallet-unit').textContent=quota?'GB':'تومان';
+ $('provider-wallet-unit').textContent=quota?'GB':unit();
  $('provider-wallet-opening').step=quota?'any':'1';
 }
 function openProviderWallet(provider){
@@ -365,13 +365,13 @@ function openWalletDialog(type,id){
  const a=walletById(id);if(!a)return;
  if(type==='credit'){
   $('wallet-credit-account').value=String(id);
-  $('wallet-credit-unit').textContent=a.kind==='money'?'تومان':'GB';
+  $('wallet-credit-unit').textContent=a.kind==='money'?unit():'GB';
   $('wallet-credit-heading').textContent=a.kind==='money'?'ثبت شارژ جدید':'ثبت حجم خریداری‌شده جدید';
   $('wallet-credit-amount').value='';$('wallet-credit-note').value='';
   $('wallet-credit-dialog').showModal();
  }else if(type==='reported'){
   $('wallet-reported-account').value=String(id);
-  $('wallet-reported-unit').textContent=a.kind==='money'?'تومان':'GB';
+  $('wallet-reported-unit').textContent=a.kind==='money'?unit():'GB';
   $('wallet-reported-amount').value='';
   $('wallet-reported-dialog').showModal();
  }
