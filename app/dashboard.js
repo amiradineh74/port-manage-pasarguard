@@ -301,7 +301,9 @@ function walletDate(utc){
 }
 function wallets(){return state?.wallets||[];}
 function walletById(id){return wallets().find(x=>x.id===Number(id));}
-function walletForProvider(provider){return wallets().find(a=>a.provider===provider);}
+function walletsForProvider(provider){
+ return wallets().filter(a=>a.provider===provider);
+}
 function walletInputNumber(field,kind){
  const n=Number($(field).value);
  if(!Number.isFinite(n)||n<0)throw Error('مقدار معتبر وارد کن.');
@@ -312,57 +314,96 @@ function walletInputNumber(field,kind){
 }
 function providerWalletDetails(name){
  if(name==='__all__'||name==='بدون ارائه‌دهنده')return '';
- const a=walletForProvider(name);
- if(!a)return '<div class="provider-credit"><button type="button" class="minor provider-credit-create" data-provider="'+escapeHtml(name)+'">تعریف موجودی پولی / حجم</button></div>';
- const opening=a.kind==='money'?a.opening_rial:a.opening_bytes;
- const usage=a.kind==='money'?a.spent_rial:a.used_bytes;
- const reported=a.reported_balance===null?'':('<p class="sub">مانده ربات: '+
-   walletAmount(a.reported_balance,a.kind)+' · اختلاف آخرین بررسی: '+walletAmount(a.comparison_gap,a.kind)+'</p>');
- return '<div class="provider-credit"><div class="provider-credit-total"><span>'+(a.kind==='money'?'مانده تخمینی کیف پول':'حجم تخمینی باقی‌مانده')+'</span>'+
-  '<strong>'+walletAmount(a.estimated_balance,a.kind)+'</strong></div>'+
-  '<small>اولیه: '+walletAmount(opening,a.kind)+' · شارژ: '+walletAmount(a.credited,a.kind)+'</small>'+
-  '<small>مصرف کسرشده: '+walletAmount(usage,a.kind)+'</small>'+
-  '<small>پورت‌های متصل: '+a.ports.length+' (از شناسه نود + پورتهای همین ارائه‌دهنده)</small>'+
-  reported+
-  '<div class="provider-credit-actions"><button class="minor provider-credit-topup" data-id="'+a.id+'" type="button">شارژ جدید</button>'+
-  '<button class="minor provider-credit-check" data-id="'+a.id+'" type="button">ثبت مانده ربات</button></div>'+
-  '<details class="wallet-history"><summary>پورت‌ها و سوابق اعتبار</summary>'+
-  a.ports.map(p=>'<p class="sub">'+escapeHtml(p.node_name||('Node '+p.node_id))+' / '+p.port+
-    ' · '+walletAmount(p.billed_bytes,'volume')+(a.kind==='money'?' · '+walletAmount(p.rate_rial_per_gb,'money')+'/GB':'')+'</p>').join('')+
-  (a.credit_history||[]).map(t=>'<p class="sub">شارژ '+walletAmount(t.amount,a.kind)+' — '+escapeHtml(walletDate(t.created_at))+'</p>').join('')+
-  (a.check_history||[]).map(t=>'<p class="sub">مانده اعلامی '+walletAmount(t.reported_amount,a.kind)+
+ const accounts=walletsForProvider(name);
+ const cards=accounts.map(a=>{
+  const opening=a.kind==='money'?a.opening_rial:a.opening_bytes;
+  const usage=a.kind==='money'?a.spent_rial:a.used_bytes;
+  const reported=a.reported_balance===null?'':('<small>مانده اعلامی: '+
+   walletAmount(a.reported_balance,a.kind)+' · اختلاف آخرین بررسی: '+
+   walletAmount(a.comparison_gap,a.kind)+'</small>');
+  const active=a.ports.filter(p=>!p.ended_at);
+  return '<article class="provider-wallet-account">'+
+   '<strong>'+escapeHtml(a.title)+'</strong><small>'+(a.kind==='money'?'حساب پولی':'حساب حجمی')+
+   ' · '+escapeHtml(a.bot_handle||'')+'</small>'+
+   '<div class="provider-credit-total"><span>مانده تخمینی</span><strong>'+
+   walletAmount(a.estimated_balance,a.kind)+'</strong></div>'+
+   '<small>ابتدا: '+walletAmount(opening,a.kind)+' · شارژ: '+walletAmount(a.credited,a.kind)+'</small>'+
+   '<small>کسر شده: '+walletAmount(usage,a.kind)+' · پورت‌های فعال: '+active.length+'</small>'+
+   reported+
+   '<div class="provider-credit-actions"><button class="minor provider-credit-edit" data-id="'+a.id+'" data-provider="'+escapeHtml(name)+'" type="button">مدیریت پورت‌ها</button>'+
+   '<button class="minor provider-credit-topup" data-id="'+a.id+'" type="button">شارژ / خرید حجم</button>'+
+   '<button class="minor provider-credit-check" data-id="'+a.id+'" type="button">ثبت مانده ربات</button></div>'+
+   '<details class="wallet-history"><summary>سابقه پورت‌ها و تراکنش‌ها</summary>'+
+    a.ports.map(p=>'<p class="sub">'+escapeHtml(p.node_name||('Node '+p.node_id))+' / '+p.port+
+     (p.ended_at?' · اتصال پایان‌یافته':' · فعال')+
+     ' · '+walletAmount(p.billed_bytes,'volume')+
+     (a.kind==='money'?' · نرخ فعلی '+walletAmount(p.rate_rial_per_gb,'money')+'/GB':'')+'</p>').join('')+
+    (a.credit_history||[]).map(t=>'<p class="sub">شارژ '+walletAmount(t.amount,a.kind)+' — '+escapeHtml(walletDate(t.created_at))+'</p>').join('')+
+    (a.check_history||[]).map(t=>'<p class="sub">مقایسه · مانده ربات '+walletAmount(t.reported_amount,a.kind)+
      ' · اختلاف '+walletAmount(t.difference,a.kind)+' — '+escapeHtml(walletDate(t.checked_at))+'</p>').join('')+
-  '</details></div>';
+   '</details></article>';
+ }).join('');
+ return '<div class="provider-credit">'+cards+
+   '<button type="button" class="minor provider-credit-create" data-provider="'+escapeHtml(name)+'">+ حساب اعتبار جدید</button></div>';
 }
 function wireProviderWalletActions(){
  document.querySelectorAll('.provider-credit-create').forEach(b=>
   b.addEventListener('click',()=>openProviderWallet(b.dataset.provider)));
+ document.querySelectorAll('.provider-credit-edit').forEach(b=>
+  b.addEventListener('click',()=>openProviderWallet(b.dataset.provider,Number(b.dataset.id))));
  document.querySelectorAll('.provider-credit-topup').forEach(b=>
   b.addEventListener('click',()=>openWalletDialog('credit',Number(b.dataset.id))));
  document.querySelectorAll('.provider-credit-check').forEach(b=>
   b.addEventListener('click',()=>openWalletDialog('reported',Number(b.dataset.id))));
 }
 function refreshProviderWalletForm(){
- const existing=$('provider-wallet-mode').value==='existing';
+ const mode=$('provider-wallet-mode').value;
  const quota=$('provider-wallet-kind').value==='volume';
- $('provider-wallet-existing-wrap').hidden=!existing;
- $('provider-wallet-new-wrap').hidden=existing;
- $('provider-wallet-opening').required=!existing;
+ $('provider-wallet-existing-wrap').hidden=mode!=='existing';
+ $('provider-wallet-new-wrap').hidden=mode!=='new';
+ $('provider-wallet-title').required=mode==='new';
+ $('provider-wallet-opening').required=mode==='new';
  $('provider-wallet-unit').textContent=quota?'GB':unit();
  $('provider-wallet-opening').step=quota?'any':'1';
 }
-function openProviderWallet(provider){
- if(walletForProvider(provider))return;
+function activeProviderAssignment(nodeId,port){
+ for(const a of wallets())for(const binding of a.ports){
+  if(!binding.ended_at&&binding.node_id===nodeId&&binding.port===port)return a;
+ }
+ return null;
+}
+function renderProviderWalletPorts(provider,accountId){
+ const available=state.ports.filter(p=>(p.provider||'بدون ارائه‌دهنده')===provider);
+ const selected=walletById(accountId);
+ const active=new Set((selected?.ports||[]).filter(p=>!p.ended_at).map(p=>p.node_id+':'+p.port));
+ $('provider-wallet-ports').innerHTML=available.map(p=>{
+  const key=p.node_id+':'+p.port,owner=activeProviderAssignment(p.node_id,p.port);
+  const checked=active.has(key);
+  return '<label class="wallet-port-option"><input type="checkbox" value="'+key+'" '+
+   (checked?'checked':'')+'><span><strong>'+escapeHtml(p.node_name)+' / '+p.port+'</strong>'+
+   '<small>'+escapeHtml(p.title||p.tag)+' · '+(owner?'در حساب «'+escapeHtml(owner.title)+'»':'بدون حساب')+
+   ' · '+escapeHtml(p.bill_direction)+' · '+money((p.price_per_gb||0))+'/GB</small></span></label>';
+ }).join('')||'<p class="sub">ابتدا پورت‌های این ارائه‌دهنده را در بخش مدیریت پورت‌ها تعریف کن.</p>';
+}
+function openProviderWallet(provider,accountId=null){
+ const account=accountId?walletById(accountId):null;
+ if(accountId&&!account){alert('حساب پیدا نشد');return;}
  $('provider-wallet-name').value=provider;
  $('provider-wallet-display').textContent=provider;
- $('provider-wallet-mode').value='new';
+ $('provider-wallet-edit-id').value=account?String(account.id):'';
+ $('provider-wallet-mode').value=account?'edit':'new';
+ $('provider-wallet-mode').querySelector('option[value="edit"]').disabled=!account;
+ $('provider-wallet-heading').textContent=account?'ویرایش پورت‌های '+account.title:'افزودن اعتبار جدید';
  $('provider-wallet-kind').value='money';
+ $('provider-wallet-title').value=account?.title||'';
  $('provider-wallet-opening').value='';
  $('provider-wallet-handle').value='';
  const candidates=wallets().filter(a=>!a.provider);
  $('provider-wallet-existing').innerHTML=candidates.map(a=>
   '<option value="'+a.id+'">'+escapeHtml(a.title)+' ('+walletAmount(a.estimated_balance,a.kind)+')</option>').join('');
  $('provider-wallet-mode').querySelector('option[value="existing"]').disabled=!candidates.length;
+ renderProviderWalletPorts(provider,accountId);
+ $('provider-wallet-existing').addEventListener('change',()=>renderProviderWalletPorts(provider,Number($('provider-wallet-existing').value)),{once:true});
  refreshProviderWalletForm();
  $('provider-wallet-dialog').showModal();
 }
@@ -389,18 +430,38 @@ async function saveWalletRequest(event,url,read,dialog){
  catch(err){alert(err.message);}finally{button.disabled=false;}
 }
 function installWalletForms(){
- $('provider-wallet-mode').addEventListener('change',refreshProviderWalletForm);
+ $('provider-wallet-mode').addEventListener('change',()=>{
+ refreshProviderWalletForm();
+ const mode=$('provider-wallet-mode').value;
+ const aid=mode==='edit'?Number($('provider-wallet-edit-id').value):
+   mode==='existing'?Number($('provider-wallet-existing').value):null;
+ renderProviderWalletPorts($('provider-wallet-name').value,aid);
+});
  $('provider-wallet-kind').addEventListener('change',refreshProviderWalletForm);
  $('provider-wallet-cancel').addEventListener('click',()=>$('provider-wallet-dialog').close());
  $('provider-wallet-form').addEventListener('submit',e=>saveWalletRequest(e,'/api/providers/wallet',()=>{
-  const existing=$('provider-wallet-mode').value==='existing';
-  return existing
-    ? {provider:$('provider-wallet-name').value,
-       existing_account_id:Number($('provider-wallet-existing').value)}
-    : {provider:$('provider-wallet-name').value,
-       kind:$('provider-wallet-kind').value,
+  const mode=$('provider-wallet-mode').value,provider=$('provider-wallet-name').value;
+  const ports=[...$('provider-wallet-ports').querySelectorAll('input[type=checkbox]:checked')]
+    .map(x=>{const [node_id,port]=x.value.split(':').map(Number);return {node_id,port};});
+  if(!ports.length&&!confirm('هیچ پورتی انتخاب نشده است؛ این حساب بدون کسر مصرف فعال بماند؟'))
+    throw Error('لطفاً پورت‌ها را انتخاب کن');
+  let transferred=false;
+  const activeId=mode==='edit'?Number($('provider-wallet-edit-id').value):
+                 mode==='existing'?Number($('provider-wallet-existing').value):0;
+  for(const port of ports){
+   const owner=activeProviderAssignment(port.node_id,port.port);
+   if(owner&&owner.id!==activeId)transferred=true;
+  }
+  if(transferred&&!confirm('برخی پورت‌ها اکنون به حساب دیگری متصل‌اند. انتقال آنها از این لحظه انجام می‌شود؛ مصرف گذشته در حساب قبلی می‌ماند. ادامه می‌دهی؟'))
+    throw Error('انتقال پورت لغو شد');
+  const payload={provider,ports,confirm_transfer:transferred};
+  if(mode==='edit')payload.account_id=activeId;
+  else if(mode==='existing')payload.existing_account_id=activeId;
+  else Object.assign(payload,{kind:$('provider-wallet-kind').value,
+       title:$('provider-wallet-title').value,
        opening_amount:walletInputNumber('provider-wallet-opening',$('provider-wallet-kind').value),
-       bot_handle:$('provider-wallet-handle').value};
+       bot_handle:$('provider-wallet-handle').value});
+  return payload;
  },'provider-wallet-dialog'));
  for(const name of ['wallet-credit','wallet-reported'])
   $(name+'-cancel').addEventListener('click',()=>$(name+'-dialog').close());
