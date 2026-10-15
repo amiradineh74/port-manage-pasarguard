@@ -137,11 +137,14 @@ function renderProviderPanels(){
         ? (selectedNode==='all'||(e.scope==='node'&&e.node_id===Number(selectedNode)))
         : (selectedNode==='all'&&e.scope==='provider'&&e.provider===name)
       ).reduce((sum,e)=>sum+Number(e.period_rial||0),0)/10)+'</small></button>'+
+    '<button class="minor provider-report-open" data-provider="'+escapeHtml(name)+'" type="button">جزئیات و گزارش پورت‌ها</button>'+
     providerWalletDetails(name)+'</article>';
  }).join('');
  document.querySelectorAll('.provider-button').forEach(b=>b.addEventListener('click',()=>{
   selectedProvider=b.dataset.provider;render();
  }));
+ document.querySelectorAll('.provider-report-open').forEach(b=>
+  b.addEventListener('click',()=>openPortReport(b.dataset.provider)));
  wireProviderWalletActions();
  const scale=$('chart-scale').value;
  const hourly=state.hourly_available && (scale==='hourly'||(scale==='auto'&&$('from').value===$('to').value));
@@ -312,6 +315,35 @@ function walletInputNumber(field,kind){
  if(!Number.isSafeInteger(amount)||amount<0)throw Error('مقدار خیلی بزرگ است.');
  return amount;
 }
+function walletSigned(value,kind){
+ return (value>0?'+':value<0?'−':'')+walletAmount(Math.abs(value),kind);
+}
+function reconciliationMonths(history,kind){
+ const groups=new Map();
+ const formatMonth=new Intl.DateTimeFormat('fa-IR-u-ca-persian',
+   {year:'numeric',month:'long',timeZone:state.timezone||'Asia/Tehran'});
+ for(const entry of history){
+  const label=formatMonth.format(new Date(entry.reconciled_at));
+  if(!groups.has(label))groups.set(label,{count:0,added:0,removed:0});
+  const m=groups.get(label);m.count++;
+  if(entry.difference>=0)m.added+=entry.difference;
+  else m.removed-=entry.difference;
+ }
+ return [...groups.entries()].map(([label,m])=>
+  '<p class="sub reconciliation-month"><strong>'+escapeHtml(label)+'</strong> · '+
+  fmt(m.count)+' بار · مجموع اختلاف‌ها '+walletAmount(m.added+m.removed,kind)+
+  ' · افزایش '+walletSigned(m.added,kind)+
+  ' · کاهش '+walletSigned(-m.removed,kind)+
+  ' · خالص '+walletSigned(m.added-m.removed,kind)+'</p>').join('');
+}
+function openPortReport(provider){
+ selectedProvider=provider;
+ $('search').value='';
+ $('port-report-title').textContent=provider==='__all__'?
+  'گزارش پورت‌ها — همه ارائه‌دهنده‌ها':'گزارش پورت‌های '+provider;
+ render();
+ $('ports-section').showModal();
+}
 function providerWalletDetails(name){
  if(name==='__all__'||name==='بدون ارائه‌دهنده')return '';
  const accounts=walletsForProvider(name);
@@ -322,6 +354,12 @@ function providerWalletDetails(name){
    walletAmount(a.reported_balance,a.kind)+' · اختلاف آخرین بررسی: '+
    walletAmount(a.comparison_gap,a.kind)+'</small>');
   const active=a.ports.filter(p=>!p.ended_at);
+  const history=a.reconciliation_history||[];
+  const added=Number(a.reconciliation_added||0),removed=Number(a.reconciliation_removed||0);
+  const latest=history[0];
+  const reconcileSummary=history.length?'<small>همسان‌سازی '+fmt(history.length)+
+   ' بار · مجموع اختلاف‌ها '+walletAmount(added+removed,a.kind)+
+   ' · خالص '+walletSigned(added-removed,a.kind)+'</small>':'';
   return '<article class="provider-wallet-account">'+
    '<strong>'+escapeHtml(a.title)+'</strong><small>'+(a.kind==='money'?'حساب پولی':'حساب حجمی')+
    ' · '+escapeHtml(a.bot_handle||'')+'</small>'+
@@ -329,10 +367,12 @@ function providerWalletDetails(name){
    walletAmount(a.estimated_balance,a.kind)+'</strong></div>'+
    '<small>ابتدا: '+walletAmount(opening,a.kind)+' · شارژ: '+walletAmount(a.credited,a.kind)+'</small>'+
    '<small>کسر شده: '+walletAmount(usage,a.kind)+' · پورت‌های فعال: '+active.length+'</small>'+
-   reported+
+   (latest?'<small>آخرین همسان‌سازی: '+walletDate(latest.reconciled_at)+
+     ' · مانده واقعی '+walletAmount(latest.reported_amount,a.kind)+'</small>':reported)+
+   reconcileSummary+
    '<div class="provider-credit-actions"><button class="minor provider-credit-edit" data-id="'+a.id+'" data-provider="'+escapeHtml(name)+'" type="button">مدیریت پورت‌ها</button>'+
    '<button class="minor provider-credit-topup" data-id="'+a.id+'" type="button">شارژ / خرید حجم</button>'+
-   '<button class="minor provider-credit-check" data-id="'+a.id+'" type="button">ثبت مانده ربات</button></div>'+
+   '<button class="minor provider-credit-check" data-id="'+a.id+'" type="button">همسان‌سازی مانده</button></div>'+
    '<details class="wallet-history"><summary>سابقه پورت‌ها و تراکنش‌ها</summary>'+
     a.ports.map(p=>'<p class="sub">'+escapeHtml(p.node_name||('Node '+p.node_id))+' / '+p.port+
      (p.ended_at?' · اتصال پایان‌یافته':' · فعال')+
@@ -341,6 +381,19 @@ function providerWalletDetails(name){
     (a.credit_history||[]).map(t=>'<p class="sub">شارژ '+walletAmount(t.amount,a.kind)+' — '+escapeHtml(walletDate(t.created_at))+'</p>').join('')+
     (a.check_history||[]).map(t=>'<p class="sub">مقایسه · مانده ربات '+walletAmount(t.reported_amount,a.kind)+
      ' · اختلاف '+walletAmount(t.difference,a.kind)+' — '+escapeHtml(walletDate(t.checked_at))+'</p>').join('')+
+   '</details>'+
+   '<details class="wallet-history reconciliation-history"><summary>تاریخچه همسان‌سازی ('+fmt(history.length)+' مورد)</summary>'+
+    (history.length?
+      '<div class="reconciliation-total">مجموع افزایش: '+walletSigned(added,a.kind)+
+      ' · مجموع کاهش: '+walletSigned(-removed,a.kind)+
+      ' · خالص: '+walletSigned(added-removed,a.kind)+'</div>'+
+      reconciliationMonths(history,a.kind)+
+      history.map(x=>'<p class="sub reconciliation-entry"><strong>'+escapeHtml(walletDate(x.reconciled_at))+'</strong>'+
+       ' · پنل قبل '+walletAmount(x.estimated_before,a.kind)+
+       ' · ربات '+walletAmount(x.reported_amount,a.kind)+
+       ' · اختلاف '+walletSigned(x.difference,a.kind)+
+       (x.note?' · '+escapeHtml(x.note):'')+'</p>').join('')
+     :'<p class="sub">هنوز همسان‌سازی ثبت نشده است.</p>')+
    '</details></article>';
  }).join('');
  return '<div class="provider-credit">'+cards+
@@ -418,8 +471,26 @@ function openWalletDialog(type,id){
   $('wallet-reported-account').value=String(id);
   $('wallet-reported-unit').textContent=a.kind==='money'?unit():'GB';
   $('wallet-reported-amount').value='';
+  $('wallet-reported-note').value='';
+  updateWalletReconcilePreview();
   $('wallet-reported-dialog').showModal();
  }
+}
+function updateWalletReconcilePreview(){
+ const a=walletById($('wallet-reported-account').value);
+ if(!a)return;
+ const input=$('wallet-reported-amount').value;
+ const before=walletAmount(a.estimated_balance,a.kind);
+ if(input===''){
+  $('wallet-reported-preview').textContent='مانده فعلی پنل: '+before;
+  return;
+ }
+ try{
+  const amount=walletInputNumber('wallet-reported-amount',a.kind);
+  $('wallet-reported-preview').textContent='مانده پنل: '+before+
+    ' · اختلاف ربات با پنل: '+walletSigned(amount-a.estimated_balance,a.kind)+
+    ' · مانده پس از همسان‌سازی: '+walletAmount(amount,a.kind);
+ }catch(e){$('wallet-reported-preview').textContent=e.message;}
 }
 async function saveWalletRequest(event,url,read,dialog){
  event.preventDefault();
@@ -473,9 +544,11 @@ function installWalletForms(){
   return {account_id:a.id,amount:walletInputNumber('wallet-credit-amount',a.kind),
    note:$('wallet-credit-note').value};
  },'wallet-credit-dialog'));
- $('wallet-reported-form').addEventListener('submit',e=>saveWalletRequest(e,'/api/wallets/reported',()=>{
+ $('wallet-reported-amount').addEventListener('input',updateWalletReconcilePreview);
+ $('wallet-reported-form').addEventListener('submit',e=>saveWalletRequest(e,'/api/wallets/reconcile',()=>{
   const a=walletById($('wallet-reported-account').value);if(!a)throw Error('حساب پیدا نشد');
-  return {account_id:a.id,amount:walletInputNumber('wallet-reported-amount',a.kind)};
+  return {account_id:a.id,amount:walletInputNumber('wallet-reported-amount',a.kind),
+   note:$('wallet-reported-note').value};
  },'wallet-reported-dialog'));
 }
 function renderExpenses(){
@@ -618,6 +691,10 @@ const rangeFrom=Jalali.attach('from','from-label','from-calendar',reload);
 rangeTo.set(initialDay);
 rangeFrom.set(new Date(Date.parse(initialDay+'T00:00:00Z')-6*86400000).toISOString().slice(0,10));
 $('reload').addEventListener('click',reload);
+$('port-report-close').addEventListener('click',()=>$('ports-section').close());
+$('open-all-port-report').addEventListener('click',e=>{
+ e.preventDefault();openPortReport('__all__');setNavigationOpen(false);
+});
 $('node-filter').addEventListener('change',()=>{selectedNode=$('node-filter').value;render();});
 $('chart-scale').addEventListener('change',renderProviderPanels);$('search').addEventListener('input',render);$('show_hidden').addEventListener('change',render);
 $('display-form').addEventListener('submit',saveDisplaySettings);
