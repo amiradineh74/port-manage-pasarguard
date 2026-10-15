@@ -60,13 +60,17 @@ vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8'),ctx,{filename:'dashboard.js'});
 (async()=>{
  await new Promise(resolve=>setImmediate(resolve));
+ elem('provider-wallet-opening').value='2437750';
+ assert.equal(vm.runInContext("walletInputNumber('provider-wallet-opening','money')",ctx),2437750);
+ vm.runInContext("state.currency='تومان'",ctx);
  elem('provider-wallet-opening').value='243775';
  assert.equal(vm.runInContext("walletInputNumber('provider-wallet-opening','money')",ctx),2437750);
+ vm.runInContext("state.currency='ریال'",ctx);
  elem('provider-wallet-opening').value='9.5';
  assert.equal(vm.runInContext("walletInputNumber('provider-wallet-opening','volume')",ctx),9500000000);
  assert.throws(()=>vm.runInContext("walletInputNumber('provider-wallet-opening','money')",ctx));
  vm.runInContext("state.wallets=[{id:11,provider:'A',title:'A',kind:'money',bot_handle:'@sample',estimated_balance:2422750,opening_rial:2437750,opening_bytes:0,credited:0,spent_rial:15000,used_bytes:1250000000,reported_balance:null,started_at:'2026-10-14T00:00:00+00:00',ports:[],credit_history:[],check_history:[]}];renderProviderPanels()",ctx);
- assert.ok(elem('providers').innerHTML.includes('۲۴۲٬۲۷۵'));
+ assert.ok(elem('providers').innerHTML.includes('۲٬۴۲۲٬۷۵۰'));
  assert.ok(elem('providers').innerHTML.includes('provider-credit'));
  vm.runInContext("state.wallets=[];renderProviderPanels()",ctx);
  assert.ok(elem('providers').innerHTML.includes('تعریف موجودی پولی / حجم'));
