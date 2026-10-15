@@ -327,3 +327,27 @@ body dialog h2{padding-bottom:8px;border-bottom:1px solid var(--line)}
 #provider-wallet-dialog label{display:flex;flex-direction:column;gap:5px}
 #provider-wallet-dialog [hidden]{display:none!important}
 @media(max-width:620px){.providers{grid-template-columns:1fr}.provider-shell{padding:7px}.provider-credit{padding:8px}}
+
+
+/* Provider wallet accounts: compact, independent balances under one provider. */
+.provider-wallet-account{border:1px solid var(--line);border-radius:11px;padding:11px;
+ display:flex;flex-direction:column;gap:7px;min-width:0}
+.provider-wallet-account>strong{font-size:13px;overflow-wrap:anywhere;color:var(--text)}
+.provider-wallet-account>small{font-size:11px;color:var(--muted);line-height:1.65}
+.provider-credit>.provider-credit-create{min-height:42px;width:100%}
+.provider-wallet-account .provider-credit-actions{margin-top:5px}
+.wallet-port-selection{display:flex;flex-direction:column;gap:8px}
+.wallet-port-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,235px),1fr));gap:6px;
+ max-height:min(36dvh,320px);overflow:auto;border:1px solid var(--line);border-radius:11px;padding:9px}
+.wallet-port-option{display:flex!important;flex-direction:row!important;align-items:center;
+ gap:10px;border:1px solid var(--line);border-radius:9px;padding:10px;cursor:pointer}
+.wallet-port-option input{width:18px;height:18px;flex:0 0 18px}
+.wallet-port-option span{display:flex;flex-direction:column;gap:4px;min-width:0}
+.wallet-port-option strong{font-size:12px;overflow-wrap:anywhere}
+.wallet-port-option small{font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.wallet-port-option:has(input:checked){border-color:var(--blue);background:var(--panel2)}
+@media(max-width:620px){
+ .provider-wallet-account{padding:9px}
+ .wallet-port-options{grid-template-columns:1fr}
+ #provider-wallet-dialog{max-height:93dvh;width:98vw}
+}
