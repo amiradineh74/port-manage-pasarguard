@@ -17,14 +17,14 @@ class StorageTests(unittest.TestCase):
         return insert_poll(self.db,{'nodes':[n],'errors':[]},at,self.cfg)
     def test_baseline_delta_cost_and_rate_snapshot(self):
         self.put('A',10,100,'2026-10-01T00:00:00+00:00')
-        self.put('A',20,1000000100,'2026-10-01T00:01:00+00:00')
+        self.put('A',20,1073741924,'2026-10-01T00:01:00+00:00')
         self.db.execute('''INSERT INTO metadata(node_id,port,price_per_gb,bill_direction) VALUES(1,2053,500,'both')''');self.db.commit()
-        self.put('A',1000000020,2000000100,'2026-10-01T00:02:00+00:00')
+        self.put('A',1073741844,2147483748,'2026-10-01T00:02:00+00:00')
         rows=self.db.execute('SELECT bill_bytes,rate_snapshot,cost,event FROM samples ORDER BY id').fetchall()
         self.assertEqual(rows[0]['bill_bytes'],0)
-        self.assertEqual(rows[1]['bill_bytes'],1000000000)
+        self.assertEqual(rows[1]['bill_bytes'],1073741824)
         self.assertEqual(rows[1]['cost'],1200)
-        self.assertEqual(rows[2]['bill_bytes'],2000000000)
+        self.assertEqual(rows[2]['bill_bytes'],2147483648)
         self.assertEqual(rows[2]['cost'],1000)
     def test_counter_reset_and_tag_change(self):
         self.put('A',100,100,'2026-10-01T00:00:00+00:00')
