@@ -316,6 +316,8 @@ class Handler(BaseHTTPRequestHandler):
                 }
                 with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
                     with db:
+                        if path in ('/api/wallets/reconcile','/api/wallets/reported'):
+                            db.execute('BEGIN IMMEDIATE')  # lock consistent balance snapshot
                         result=handlers[path](db,payload)
                 return self.send_json({'ok':True,'id':result if type(result) is int else result.get('account_id'), 'result':result})
             except (ValueError,TypeError,KeyError,OverflowError) as err:
