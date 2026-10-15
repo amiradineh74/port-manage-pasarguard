@@ -77,22 +77,30 @@
 <div class="buttons"><button type="button" class="minor" id="expense-cancel">انصراف</button><button type="submit" class="primary">ذخیره هزینه</button></div>
 </form></dialog>
 <dialog id="provider-wallet-dialog"><form id="provider-wallet-form" method="dialog">
-<h2>مدیریت اعتبار ارائه‌دهنده</h2>
+<h2 id="provider-wallet-heading">تعریف حساب اعتبار ارائه‌دهنده</h2>
 <input id="provider-wallet-name" type="hidden">
+<input id="provider-wallet-edit-id" type="hidden">
 <p>ارائه‌دهنده: <strong id="provider-wallet-display"></strong></p>
-<label>روش ثبت اعتبار<select id="provider-wallet-mode">
-<option value="new">ثبت موجودی فعلی</option>
-<option value="existing">اتصال به حسابی که قبلاً ساخته‌ام</option>
+<label>عملیات<select id="provider-wallet-mode">
+<option value="new">ساخت حساب مستقل جدید</option>
+<option value="existing">اتصال کیف پول قبلی به این ارائه‌دهنده</option>
+<option value="edit">ویرایش پورت‌های حساب موجود</option>
 </select></label>
 <div id="provider-wallet-existing-wrap" hidden><label>حساب قبلی<select id="provider-wallet-existing"></select></label>
-<p class="sub">اطلاعات، شارژها و زمان شروع محاسبه این حساب حفظ می‌شود؛ فقط پورت‌های متعلق به همین ارائه‌دهنده به آن وصل می‌شوند.</p></div>
+<p class="sub">موجودی، سوابق شارژ و تاریخ شروع حساب قبلی حفظ می‌شوند.</p></div>
 <div id="provider-wallet-new-wrap">
-<label>نوع اعتبار<select id="provider-wallet-kind"><option value="money">موجودی پولی (تومان)</option><option value="volume">اعتبار حجمی (GB)</option></select></label>
-<label>موجودی فعلی ربات به <span id="provider-wallet-unit">تومان</span><input id="provider-wallet-opening" type="number" required min="0" step="1" inputmode="decimal"></label>
-<label>شناسه ربات (اختیاری)<input id="provider-wallet-handle" maxlength="128" placeholder="@supplierbot"></label>
+<label>نام حساب اعتبار<input id="provider-wallet-title" maxlength="128" required placeholder="مثلاً سرور ایران شماره ۱"></label>
+<label>نوع حساب<select id="provider-wallet-kind"><option value="money">موجودی پولی</option><option value="volume">حجم باقی‌مانده (GB)</option></select></label>
+<label>موجودی فعلی به <span id="provider-wallet-unit">ریال</span><input id="provider-wallet-opening" type="number" min="0" step="1" inputmode="decimal" required></label>
+<label>نام ربات (اختیاری)<input id="provider-wallet-handle" maxlength="128" placeholder="@supplierbot"></label>
 </div>
-<p class="sub">پورت‌ها و تعرفه هر گیگ از اطلاعاتی که قبلاً برای همین ارائه‌دهنده ثبت کردی خوانده می‌شوند. مصرف قبل از ثبت اعتبار مجدداً کسر نمی‌شود. اگر چند نرخ داری، تعرفه هر پورت را از بخش «فهرست پورت‌ها» تعیین کن.</p>
-<div class="buttons"><button class="minor" type="button" id="provider-wallet-cancel">انصراف</button><button class="primary" type="submit">ثبت و اتصال خودکار پورت‌ها</button></div>
+<div class="wallet-port-selection">
+<strong>پورت‌هایی که از این اعتبار کم می‌شوند</strong>
+<p class="sub">فقط پورت‌های همان ارائه‌دهنده نمایش داده می‌شوند. برای حساب‌های پولی، نرخ و جهت مصرف هر پورت از تنظیمات پورت خوانده می‌شود.</p>
+<div id="provider-wallet-ports" class="wallet-port-options"></div>
+</div>
+<p class="sub">هر پورت در هر زمان فقط به یک حساب تعلق دارد. انتقال به حساب دیگر، مصرف گذشته را به حساب جدید منتقل نمی‌کند؛ حساب قبلی تاریخچه مصرفش را حفظ می‌کند.</p>
+<div class="buttons"><button class="minor" type="button" id="provider-wallet-cancel">انصراف</button><button class="primary" type="submit" id="provider-wallet-submit">ذخیره حساب و پورت‌ها</button></div>
 </form></dialog>
 <dialog id="wallet-credit-dialog"><form id="wallet-credit-form" method="dialog">
 <h2 id="wallet-credit-heading">افزایش شارژ یا حجم</h2>
