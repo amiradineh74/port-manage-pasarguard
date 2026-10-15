@@ -74,6 +74,22 @@ class WalletTests(unittest.TestCase):
         self.assertEqual(self.db.execute(
             'SELECT COUNT(*) FROM supplier_accounts WHERE id=?',(account_id,)).fetchone()[0],1)
 
+    def test_provider_rate_change_applies_only_to_future_samples(self):
+        self.db.execute("""INSERT INTO metadata(node_id,port,provider,price_per_gb,bill_direction)
+            VALUES(7,47307,'Pooya',1200,'both')""")
+        with patch.object(wallets,'utc_now',return_value='2026-10-14T01:01:00+00:00'):
+            wallets.assign_provider_wallet(self.db,{
+                'provider':'Pooya','kind':'money','opening_amount':2437750})
+        self.poll(4000000000,750000000,'2026-10-14T01:02:00+00:00')
+        self.assertEqual(wallets.wallet_report(self.db)[0]['spent_rial'],15000)
+        with patch.object(wallets,'utc_now',return_value='2026-10-14T01:03:00+00:00'):
+            wallets.sync_provider_port(self.db,'Pooya',7,47307,'both',1500)
+        self.poll(5000000000,750000000,'2026-10-14T01:04:00+00:00')
+        self.assertEqual(wallets.wallet_report(self.db)[0]['spent_rial'],30000)
+        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],2407750)
+        terms=self.db.execute('SELECT COUNT(*) FROM supplier_port_terms').fetchone()[0]
+        self.assertEqual(terms,1)
+
     def test_link_existing_wallet_without_restarting_or_charging_old_traffic(self):
         self.db.execute("""INSERT INTO metadata(node_id,port,provider,price_per_gb,bill_direction)
             VALUES(7,47307,'Pooya',1200,'both')""")
