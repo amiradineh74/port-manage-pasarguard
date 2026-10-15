@@ -3,7 +3,10 @@ const $=id=>document.getElementById(id);
 let state=null;
 let selectedProvider='__all__';
 const fmt=n=>new Intl.NumberFormat('fa-IR',{maximumFractionDigits:2}).format(n||0);
-const traffic=n=>(n/1e9>=1?fmt(n/1e9)+' GB':fmt(n/1e6)+' MB');
+const bytesPerGiB=1024**3,bytesPerMiB=1024**2;
+// Display traffic in IEC binary units, matching PasarGuard's usage charts.
+// Keep supplier wallet quantities and monetary rates in decimal GB (1e9 bytes).
+const traffic=n=>(n/bytesPerGiB>=1?fmt(n/bytesPerGiB)+' GiB':fmt(n/bytesPerMiB)+' MiB');
 const isRial=()=>['ریال','Rial','IRR'].includes(state?.currency);
 const unit=()=>isRial()?'ریال':'تومان';
 const multiplier=()=>isRial()?10:1;
@@ -64,7 +67,7 @@ function stackedBars(id,groups,field){
  const w=Math.min(5500,Math.max(760,groups.length*38+left+right));
  const barArea=w-left-right;
  const barWidth=Math.max(3,Math.min(65,barArea/groups.length*.68));
- const amounts=groups.map(g=>[...g.nodes.values()].reduce((acc,node)=>acc+(field==='traffic'?(node.down+node.up)/1e9:node.cost*multiplier()),0));
+ const amounts=groups.map(g=>[...g.nodes.values()].reduce((acc,node)=>acc+(field==='traffic'?(node.down+node.up)/bytesPerGiB:node.cost*multiplier()),0));
  const max=Math.max(.0001,...amounts)*1.12;
  const y=val=>h-bottom-(h-bottom-top)*val/max;
  let svg='<svg class="stacked-chart" role="img" aria-label="'+(field==='traffic'?'نمودار ستونی حجم تفکیک نود':'نمودار ستونی هزینه تفکیک نود')+'" viewBox="0 0 '+w+' '+h+'" style="min-width:'+w+'px">';
@@ -72,7 +75,7 @@ function stackedBars(id,groups,field){
   const v=max*k/4,Y=y(v);
   svg+='<line x1="'+left+'" y1="'+Y+'" x2="'+(w-right)+'" y2="'+Y+'" stroke="var(--chart-grid,#294059)"/>';
   svg+='<text x="'+(left-8)+'" y="'+(Y+4)+'" text-anchor="end" fill="var(--chart-label,#a6b9d1)" font-size="12">'+
-    escapeHtml((field==='traffic'?fmt(v):isRial()?rialFormatter.format(Math.round(v)):fmt(v))+(field==='traffic'?' GB':' '+unit()))+'</text>';
+    escapeHtml((field==='traffic'?fmt(v):isRial()?rialFormatter.format(Math.round(v)):fmt(v))+(field==='traffic'?' GiB':' '+unit()))+'</text>';
  }
  const step=Math.max(1,Math.ceil(groups.length/10));
  for(let i=0;i<groups.length;i++){
@@ -80,7 +83,7 @@ function stackedBars(id,groups,field){
   let sum=0;
   for(const nid of selectedIds){
    const item=g.nodes.get(nid);if(!item)continue;
-   const value=field==='traffic'?(item.down+item.up)/1e9:item.cost*multiplier();
+   const value=field==='traffic'?(item.down+item.up)/bytesPerGiB:item.cost*multiplier();
    if(value<=0)continue;
    const height=(h-bottom-top)*value/max,Y=y(sum+value);
    const title=periodLabel(g.period)+' | '+item.node_name+
