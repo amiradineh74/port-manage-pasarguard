@@ -13,6 +13,7 @@ import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'app'))
 import web
 from storage import connect,insert_poll
+from units import BYTES_PER_GIB as GiB
 
 class WebTests(unittest.TestCase):
     @classmethod
@@ -28,7 +29,7 @@ class WebTests(unittest.TestCase):
             sample={'nodes':[{'node_id':5,'node_name':'Germany','address':'192.0.2.1',
                    'ports':[{'port':2053,'tag':'old','uplink':5,'downlink':10}]}], 'errors': []}
             insert_poll(db,sample,'2026-10-13T00:00:00+00:00',web.CFG)
-            sample['nodes'][0]['ports'][0]['downlink']=1000000010
+            sample['nodes'][0]['ports'][0]['downlink']=(GiB+10)
             insert_poll(db,sample,'2026-10-13T00:01:00+00:00',web.CFG)
         cls.server=ThreadingHTTPServer(('127.0.0.1',0),web.Handler)
         cls.thread=Thread(target=cls.server.serve_forever,daemon=True);cls.thread.start()
@@ -61,7 +62,7 @@ class WebTests(unittest.TestCase):
         with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
             before=tuple(db.execute('SELECT COUNT(*),COALESCE(SUM(delta_down),0) FROM samples').fetchone())
             sample={'nodes':[{'node_id':77,'node_name':'SupplierNode','address':'192.0.2.77',
-                 'ports':[{'port':55003,'tag':'supplier-port','uplink':0,'downlink':1000000000}]}],
+                 'ports':[{'port':55003,'tag':'supplier-port','uplink':0,'downlink':GiB}]}],
                  'errors':[]}
             insert_poll(db,sample,'2026-10-13T00:00:00+00:00',web.CFG)
             db.execute("""INSERT INTO metadata(node_id,port,provider,price_per_gb,bill_direction)
@@ -75,7 +76,7 @@ class WebTests(unittest.TestCase):
             st,_,_=self.request('POST','/api/providers/wallet',json.dumps(obj),hdr)
             self.assertEqual(st,400)
         with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
-            sample['nodes'][0]['ports'][0]['downlink']=3000000000
+            sample['nodes'][0]['ports'][0]['downlink']=3*GiB
             insert_poll(db,sample,'2026-10-13T00:01:00+00:00',web.CFG)
         st,_,raw=self.request('GET','/api/wallets',headers={'Cookie':cookie})
         self.assertEqual(st,200)
@@ -94,7 +95,7 @@ class WebTests(unittest.TestCase):
             current=db.execute('SELECT provider FROM metadata WHERE node_id=77 AND port=55003').fetchone()[0]
             self.assertEqual(current,'InvoiceBot')
             self.assertEqual(retained[0],before[0]+2)
-            self.assertEqual(retained[1],before[1]+2000000000)
+            self.assertEqual(retained[1],before[1]+2*GiB)
             # WebTests shares one temporary test DB across methods; undo only
             # this synthetic node/provider fixture so subsequent tests stay isolated.
             with db:
@@ -185,7 +186,7 @@ class WebTests(unittest.TestCase):
         self.assertEqual(st,200)
         data=json.loads(b)
         self.assertEqual(data['ports'][0]['port'],2053)
-        self.assertEqual(data['total']['down'],1000000000)
+        self.assertEqual(data['total']['down'],GiB)
         self.assertEqual(data['daily_by_provider'][0]['node_id'],5)
         self.assertEqual(data['daily_by_provider'][0]['node_name'],'Germany')
         st,headers,calendar=self.request('GET','/jalali.js',headers={'Cookie':cookie})
@@ -268,7 +269,7 @@ class WebTests(unittest.TestCase):
         self.assertEqual(new['currency'],'Toman')
         self.assertEqual(new['timezone'],'UTC')
         self.assertEqual([p['enabled'] for p in new['ports'] if p['node_id']==5 and p['port']==50315],[0])
-        self.assertEqual(new['total']['down'],1000000000)
+        self.assertEqual(new['total']['down'],GiB)
         st,_,_=self.request('POST','/api/display-settings',
                             json.dumps({'title':'Bad','currency':'Toman','timezone':'Invalid/Zone'}),hdr)
         self.assertEqual(st,400)
@@ -360,7 +361,7 @@ class WebTests(unittest.TestCase):
                               headers={'Cookie':cookie})
         self.assertEqual(st,200)
         exported=raw.decode('utf-8-sig')
-        self.assertIn('Recorded Rate Rial/GB',exported)
+        self.assertIn('Recorded Rate Rial/Unit',exported)
         self.assertIn('Recorded Cost Rial',exported)
         self.assertIn('10000.0',exported)
 
