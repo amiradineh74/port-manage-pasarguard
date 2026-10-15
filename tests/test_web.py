@@ -68,7 +68,7 @@ class WebTests(unittest.TestCase):
                         VALUES(77,55003,'InvoiceBot',1200,'downlink')""")
             db.commit()
         with patch.object(supplier_wallets,'utc_now',return_value='2026-10-13T00:00:30+00:00'):
-            obj={'provider':'InvoiceBot','kind':'money','opening_amount':2437750}
+            obj={'provider':'InvoiceBot','kind':'money','opening_amount':2437750,'ports':[{'node_id':77,'port':55003}]}
             st,_,raw=self.request('POST','/api/providers/wallet',json.dumps(obj),hdr)
             self.assertEqual(st,200)
             wallet_id=json.loads(raw)['id']
