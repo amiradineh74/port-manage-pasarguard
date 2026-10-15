@@ -2,7 +2,7 @@
 
 A supplier account starts at a manually recorded balance checkpoint. Port bindings
 start when saved; only subsequently collected Xray deltas are counted. Provider
-reported balances are comparison snapshots, never automatically treated as credits.
+reported balances may be read-only comparisons or explicit audited reconciliations.
 All money is integer IRR; all traffic is decimal GB (1 GB = 1e9 bytes).
 """
 from datetime import datetime,timezone
@@ -231,6 +231,33 @@ def report_balance(db,data):
     db.execute('''INSERT INTO supplier_checks(account_id,checked_at,reported_amount,estimated_amount,difference)
                   VALUES(?,?,?,?,?)''',(account['id'],now,amount,estimate,gap))
 
+def reconcile_balance(db,data):
+    """Align the monitor estimate to a real supplier balance via an audit entry.
+
+    The signed difference never alters past credits, traffic samples, or Xray.
+    A subsequent estimate includes all reconciliations up to its timestamp.
+    """
+    account=known_account(db,data.get('account_id'))
+    amount=require_int(data.get('amount'),'مانده واقعی ربات',0)
+    note=text_field(data.get('note',''),'توضیح همسان‌سازی',250)
+    now=utc_now()
+    bindings=[dict(r) for r in db.execute(
+        'SELECT * FROM supplier_ports WHERE account_id=?',(account['id'],))]
+    estimate=_estimate(db,account,bindings,now)['estimated_balance']
+    difference=amount-estimate
+    db.execute('''INSERT INTO supplier_reconciliations
+        (account_id,reconciled_at,reported_amount,estimated_before,difference,note)
+        VALUES(?,?,?,?,?,?)''',
+        (account['id'],now,amount,estimate,difference,note))
+    if account['kind']=='money':
+        db.execute('UPDATE supplier_accounts SET reported_rial=?,reported_at=? WHERE id=?',
+                   (amount,now,account['id']))
+    else:
+        db.execute('UPDATE supplier_accounts SET reported_bytes=?,reported_at=? WHERE id=?',
+                   (amount,now,account['id']))
+    return db.execute('SELECT last_insert_rowid()').fetchone()[0]
+
+
 def _estimate(db,account,bindings,until=None):
     spent_rial=0
     spent_bytes=0
@@ -275,9 +302,13 @@ def _estimate(db,account,bindings,until=None):
       (account['id'],account['started_at'],until) if until else
       (account['id'],account['started_at'])).fetchone()[0]
     initial=account['opening_rial'] if account['kind']=='money' else account['opening_bytes']
-    balance=int(initial)+int(credits)-(spent_rial if account['kind']=='money' else spent_bytes)
+    adjustments=db.execute('''SELECT COALESCE(SUM(difference),0)
+        FROM supplier_reconciliations WHERE account_id=?'''+
+        (' AND reconciled_at<=?' if until else ''),
+        (account['id'],until) if until else (account['id'],)).fetchone()[0]
+    balance=int(initial)+int(credits)+int(adjustments)-(spent_rial if account['kind']=='money' else spent_bytes)
     return {'estimated_balance':balance,'credited':int(credits),'used_bytes':spent_bytes,
-            'spent_rial':spent_rial,'ports':per_port}
+            'spent_rial':spent_rial,'reconciled_delta_total':int(adjustments),'ports':per_port}
 
 def wallet_report(db):
     accounts=[]
@@ -297,7 +328,14 @@ def wallet_report(db):
         comparison=checks[0]['difference'] if checks else None
         credits=[dict(r) for r in db.execute(
             'SELECT * FROM supplier_credits WHERE account_id=? ORDER BY id DESC LIMIT 20',(a['id'],))]
+        reconciliations=[dict(r) for r in db.execute(
+            '''SELECT * FROM supplier_reconciliations
+                WHERE account_id=? ORDER BY reconciled_at DESC,id DESC''',(a['id'],))]
         accounts.append(dict(account,**result,reported_balance=reported,
                              comparison_gap=comparison,credit_history=credits,
-                             check_history=checks))
+                             check_history=checks,
+                             reconciliation_history=reconciliations,
+                             reconciliation_count=len(reconciliations),
+                             reconciliation_added=sum(x['difference'] for x in reconciliations if x['difference']>0),
+                             reconciliation_removed=sum(-x['difference'] for x in reconciliations if x['difference']<0)))
     return accounts
