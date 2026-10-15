@@ -128,6 +128,17 @@ CREATE TABLE IF NOT EXISTS supplier_checks (
  difference INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_supplier_checks_account ON supplier_checks(account_id,checked_at);
+CREATE TABLE IF NOT EXISTS supplier_reconciliations (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ account_id INTEGER NOT NULL REFERENCES supplier_accounts(id),
+ reconciled_at TEXT NOT NULL,
+ reported_amount INTEGER NOT NULL CHECK(reported_amount>=0),
+ estimated_before INTEGER NOT NULL,
+ difference INTEGER NOT NULL,
+ note TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_supplier_reconciliations_account
+ ON supplier_reconciliations(account_id,reconciled_at);
 
 
 
