@@ -50,6 +50,55 @@ class WebTests(unittest.TestCase):
         self.assertEqual(st,303)
         return h['Set-Cookie'].split(';')[0]
 
+    def test_supplier_wallet_management_http_isolated_and_csrf(self):
+        from unittest.mock import patch
+        import supplier_wallets
+        cookie=self.login()
+        st,_,raw=self.request('GET',
+            '/api/dashboard?from=2026-10-13&to=2026-10-13',headers={'Cookie':cookie})
+        csrf=json.loads(raw)['csrf']
+        headers={'Cookie':cookie,'Content-Type':'application/json','X-CSRF-Token':csrf}
+        with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+            before=tuple(db.execute('SELECT COUNT(*),COALESCE(SUM(delta_down),0) FROM samples').fetchone())
+        account={'kind':'money','title':'Bot wallet','bot_handle':'@placeholder',
+                 'opening_amount':2437750}
+        st,_,_=self.request('POST','/api/wallets/create',json.dumps(account),
+                             {'Cookie':cookie,'Content-Type':'application/json'})
+        self.assertEqual(st,403)
+        st,_,_=self.request('GET','/api/wallets')
+        self.assertEqual(st,401)
+        with patch.object(supplier_wallets,'utc_now',return_value='2026-10-13T00:00:01+00:00'):
+            st,_,raw=self.request('POST','/api/wallets/create',json.dumps(account),headers)
+            self.assertEqual(st,200)
+            aid=json.loads(raw)['id']
+            st,_,_=self.request('POST','/api/wallets/attach',json.dumps({
+                'account_id':aid,'node_id':5,'port':2053,
+                'rate_rial_per_gb':12000,'direction':'downlink'}),headers)
+            self.assertEqual(st,200)
+            st,_,_=self.request('POST','/api/wallets/attach',json.dumps({
+                'account_id':aid,'node_id':5,'port':2053,
+                'rate_rial_per_gb':12000,'direction':'downlink'}),headers)
+            self.assertEqual(st,400)
+        st,_,raw=self.request('GET','/api/wallets',headers={'Cookie':cookie})
+        self.assertEqual(st,200)
+        found=next(a for a in json.loads(raw)['accounts'] if a['id']==aid)
+        self.assertEqual(found['spent_rial'],12000)
+        self.assertEqual(found['estimated_balance'],2425750)
+        with patch.object(supplier_wallets,'utc_now',return_value='2026-10-13T00:03:00+00:00'):
+            st,_,_=self.request('POST','/api/wallets/credit',
+                json.dumps({'account_id':aid,'amount':500000,'note':'New topup'}),headers)
+            self.assertEqual(st,200)
+            st,_,_=self.request('POST','/api/wallets/reported',
+                json.dumps({'account_id':aid,'amount':2925750}),headers)
+            self.assertEqual(st,200)
+        st,_,raw=self.request('GET','/api/wallets',headers={'Cookie':cookie})
+        found=next(a for a in json.loads(raw)['accounts'] if a['id']==aid)
+        self.assertEqual(found['estimated_balance'],2925750)
+        self.assertEqual(found['comparison_gap'],0)
+        with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+            after=tuple(db.execute('SELECT COUNT(*),COALESCE(SUM(delta_down),0) FROM samples').fetchone())
+        self.assertEqual(before,after)
+
     def test_unauthenticated_block(self):
         st,_,_=self.request('GET','/api/dashboard')
         self.assertEqual(st,401)
