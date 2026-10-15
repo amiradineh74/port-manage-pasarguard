@@ -7,6 +7,7 @@
 <a href="#providers-section">نمودار و ارائه‌دهندگان</a>
 <a href="#ports-section">گزارش پورت‌ها</a>
 <a href="#manage">مدیریت پورت‌ها</a>
+<a href="#wallets">کیف پول و حجم خریداری‌شده</a>
 <a href="#expenses">هزینه‌های ثابت</a>
 <a href="#settings-section">تنظیمات</a>
 </nav>
@@ -47,6 +48,15 @@
     <p class="sub">تغییرات این بخش فقط در دیتابیس مستقل مانیتورینگ ذخیره می‌شود. تغییر تعرفه و نام هر پورت از دکمه «ویرایش» جدول بالا انجام می‌شود.</p>
   </div>
 </section>
+<section class="panel" id="wallets">
+ <div class="section-head"><div><h2>کیف پول و حجم خریداری‌شده ربات‌ها</h2>
+ <p>موجودی تخمینی هر تأمین‌کننده از زمان ثبت مانده اولیه، به تفکیک پورت؛ بدون اتصال به حساب ربات.</p></div>
+ <button class="primary" type="button" id="wallet-new">افزودن ربات / حساب</button></div>
+ <div class="expense-formula" role="note"><strong>روش محاسبه</strong>
+ <span>کیف پول: مانده اولیه + شارژهای بعدی − (حجم مشمول هزینه × تعرفه اختصاصی هر پورت). بسته حجمی: حجم باقیمانده اولیه + خریدهای بعدی − حجم مصرف ثبت‌شده. مصرف قبل از زمان اتصال پورت محاسبه نمی‌شود.</span></div>
+ <div class="wallets-grid" id="wallets-list"><p class="sub">حسابی ثبت نشده است.</p></div>
+ <p class="sub">مقادیر تخمینی هستند؛ سربار تونل، روش صورتحساب تأمین‌کننده و اختلاف زمان نمونه‌برداری ممکن است اختلاف ایجاد کنند. مبلغ شارژی که قبلاً داخل موجودی اولیه محاسبه شده را دوباره ثبت نکنید.</p>
+</section>
 <section class="panel" id="expenses">
 <div class="section-head"><div><h2>دفتر هزینه‌های ثابت و جانبی</h2><p>هزینه‌های ماهانه و یکباره. مبلغ «هزینه این بازه» فقط سهم روزهای انتخاب‌شده از ماه میلادی است؛ مبلغ پایه، هزینه کامل ماهانه یا پرداخت یکباره است.</p></div><div class="cost-header-actions"><a href="#" class="minor linkbutton" id="export-expenses">خروجی CSV هزینه‌ها</a><button class="primary" type="button" id="new-expense">ثبت هزینه جدید</button></div></div>
 <div class="expense-formula" role="note"><strong>فرمول هزینه ماهانه</strong><span>مبلغ پایه ماهانه × روزهای مشمول بازه گزارش ÷ تعداد روزهای همان ماه میلادی. برای ماه‌های مختلف، سهم هر ماه جدا جمع می‌شود؛ هزینه یکباره فقط در روز ثبت آن محاسبه می‌شود.</span></div>
@@ -75,6 +85,40 @@
 <label>یادداشت<textarea id="expense-note" maxlength="1000" rows="2"></textarea></label>
 <p class="sub">هزینه ماهانه برای ماه‌های میلادی بر اساس تعداد روزهای داخل بازه تقسیم می‌شود. این هزینه از مانیتورینگ مستقل است؛ هیچ تغییری در سرور یا پنل اصلی ایجاد نمی‌کند.</p>
 <div class="buttons"><button type="button" class="minor" id="expense-cancel">انصراف</button><button type="submit" class="primary">ذخیره هزینه</button></div>
+</form></dialog>
+<dialog id="wallet-create-dialog"><form id="wallet-create-form" method="dialog">
+<h2>افزودن ربات یا حساب تأمین‌کننده</h2>
+<label>نام حساب<input id="wallet-title" required maxlength="128" placeholder="مثلاً ربات خرید پورت"></label>
+<label>شناسه ربات / توضیح<input id="wallet-handle" maxlength="128" placeholder="@example_bot"></label>
+<label>نوع اعتبار<select id="wallet-kind"><option value="money">کیف پول پولی (تومان)</option><option value="volume">حجم خریداری‌شده (GB)</option></select></label>
+<label>موجودی فعلی ربات به <span id="wallet-open-unit">تومان</span><input id="wallet-opening" type="number" min="0" step="1" required inputmode="decimal"></label>
+<label>یادداشت<input id="wallet-notes" maxlength="1000" placeholder="اختیاری"></label>
+<p class="sub">مقدار را از موجودی «همین الان» ربات وارد کن. این یک نقطه شروع جدید است؛ شارژهای قبلی را جداگانه ثبت نکن. نمونه‌های مصرف پس از اتصال هر پورت کسر می‌شوند.</p>
+<div class="buttons"><button class="minor" type="button" id="wallet-create-cancel">انصراف</button><button type="submit" class="primary">ثبت حساب</button></div>
+</form></dialog>
+<dialog id="wallet-port-dialog"><form id="wallet-port-form" method="dialog">
+<h2>اتصال پورت به کیف پول / سهمیه</h2>
+<input type="hidden" id="wallet-port-account">
+<label>انتخاب نود و پورت<select id="wallet-port-identity" required></select></label>
+<label>جهت محاسبه مصرف<select id="wallet-port-direction"><option value="both">مجموع دانلود + آپلود</option><option value="downlink">فقط دانلود</option><option value="uplink">فقط آپلود</option></select></label>
+<label id="wallet-port-rate-wrap">تعرفه هر GB (تومان)<input type="number" step="1" min="0" id="wallet-port-rate" required value="0"></label>
+<p class="sub">ثبت اتصال، نقطه شروع مصرف این پورت است. برای حساب حجمی فقط GB مصرف‌شده کسر می‌شود؛ برای حساب پولی نرخ هر GB روی حجم مشمول اعمال می‌شود.</p>
+<div class="buttons"><button type="button" class="minor" id="wallet-port-cancel">انصراف</button><button type="submit" class="primary">اتصال پورت</button></div>
+</form></dialog>
+<dialog id="wallet-credit-dialog"><form id="wallet-credit-form" method="dialog">
+<h2 id="wallet-credit-heading">افزایش شارژ یا حجم</h2>
+<input type="hidden" id="wallet-credit-account">
+<label>مقدار افزوده‌شده به <span id="wallet-credit-unit">تومان</span><input type="number" id="wallet-credit-amount" min="0.000001" step="any" required></label>
+<label>شرح تراکنش<input id="wallet-credit-note" maxlength="250" placeholder="تمدید یا خرید جدید"></label>
+<p class="sub">فقط خریدهایی را ثبت کن که بعد از مانده اولیه/قبلی انجام شده‌اند. این فرم موجودی واقعی ربات را تغییر نمی‌دهد.</p>
+<div class="buttons"><button type="button" class="minor" id="wallet-credit-cancel">انصراف</button><button type="submit" class="primary">ثبت شارژ/حجم</button></div>
+</form></dialog>
+<dialog id="wallet-reported-dialog"><form id="wallet-reported-form" method="dialog">
+<h2>ثبت مانده اعلام‌شده ربات برای مقایسه</h2>
+<input type="hidden" id="wallet-reported-account">
+<label>موجودی اعلام‌شده به <span id="wallet-reported-unit">تومان</span><input type="number" id="wallet-reported-amount" min="0" step="any" required></label>
+<p class="sub">این مقدار فقط برای مقایسه ذخیره می‌شود؛ کیف پول تخمینی را شارژ یا اصلاح نمی‌کند. بهتر است بعد از نمونه‌برداری مانده ربات را وارد کنی تا دو زمان به هم نزدیک باشند.</p>
+<div class="buttons"><button class="minor" type="button" id="wallet-reported-cancel">انصراف</button><button class="primary" type="submit">ثبت مانده مرجع</button></div>
 </form></dialog>
 <script src="/jalali.js"></script>
 <script src="/dashboard.js"></script>
