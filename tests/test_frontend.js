@@ -73,7 +73,7 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  assert.ok(elem('providers').innerHTML.includes('۲٬۴۲۲٬۷۵۰'));
  assert.ok(elem('providers').innerHTML.includes('provider-credit'));
  vm.runInContext("state.wallets=[];renderProviderPanels()",ctx);
- assert.ok(elem('providers').innerHTML.includes('تعریف موجودی پولی / حجم'));
+ assert.ok(elem('providers').innerHTML.includes('حساب اعتبار جدید'));
  assert.equal(elem('main-nav').dataset.open,'false');
  assert.equal(elem('nav-toggle').attributes['aria-expanded'],'false');
  vm.runInContext('setNavigationOpen(true)',ctx);
