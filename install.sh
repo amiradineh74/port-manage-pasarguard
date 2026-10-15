@@ -20,8 +20,17 @@ while true; do
   echo 'Invalid directory. Enter an absolute path (e.g. /opt/pg-traffic-monitor), or press Enter for default.' >&2
 done
 if [[ -e "$INSTALL_DIR/app/collector.py" ]];then
-  read -r -p 'An installation exists. Update the application files? [y/N]: ' q
-  [[ "$q" =~ ^[Yy]$ ]] || exit 0
+  if [[ -f "$INSTALL_DIR/config.json" ]];then
+    read -r -p 'An installation exists. Update the application files? [y/N]: ' q
+    [[ "$q" =~ ^[Yy]$ ]] || exit 0
+  elif grep -Fq 'Read-only PasarGuard inbound collector' "$INSTALL_DIR/app/collector.py";then
+    # Setup may have been cancelled before saving config.json. Resume only the
+    # known monitor installation, never ask a novice to uninstall and retry.
+    echo 'Incomplete traffic-monitor setup detected (no config.json). Resuming safely.'
+  else
+    echo 'Unknown collector found without config.json; refusing to overwrite.' >&2
+    exit 1
+  fi
 fi
 if ! id pgtraffic >/dev/null 2>&1; then
   useradd --system --no-create-home --shell /usr/sbin/nologin pgtraffic
