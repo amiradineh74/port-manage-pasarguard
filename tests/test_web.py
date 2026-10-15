@@ -95,6 +95,18 @@ class WebTests(unittest.TestCase):
             self.assertEqual(current,'InvoiceBot')
             self.assertEqual(retained[0],before[0]+2)
             self.assertEqual(retained[1],before[1]+2000000000)
+            # WebTests shares one temporary test DB across methods; undo only
+            # this synthetic node/provider fixture so subsequent tests stay isolated.
+            with db:
+                db.execute('DELETE FROM supplier_checks WHERE account_id=?',(wallet_id,))
+                db.execute('DELETE FROM supplier_credits WHERE account_id=?',(wallet_id,))
+                db.execute('DELETE FROM supplier_port_terms WHERE binding_id IN (SELECT id FROM supplier_ports WHERE account_id=?)',(wallet_id,))
+                db.execute('DELETE FROM provider_wallet_links WHERE account_id=?',(wallet_id,))
+                db.execute('DELETE FROM supplier_ports WHERE account_id=?',(wallet_id,))
+                db.execute('DELETE FROM supplier_accounts WHERE id=?',(wallet_id,))
+                db.execute('DELETE FROM metadata WHERE node_id=77')
+                db.execute('DELETE FROM samples WHERE node_id=77')
+                db.execute('DELETE FROM port_state WHERE node_id=77')
 
     def test_supplier_wallet_management_http_isolated_and_csrf(self):
         from unittest.mock import patch
