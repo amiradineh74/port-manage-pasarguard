@@ -1,6 +1,8 @@
 """Own SQLite database. No writes whatsoever to the PasarGuard database."""
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
+from units import BYTES_PER_GIB, TRAFFIC_UNIT
 
 DDL = """
 CREATE TABLE IF NOT EXISTS port_state (
@@ -41,6 +43,7 @@ CREATE TABLE IF NOT EXISTS samples (
   bill_bytes INTEGER NOT NULL,
   rate_snapshot REAL NOT NULL,
   cost REAL NOT NULL,
+  rate_unit TEXT NOT NULL DEFAULT 'GiB',
   event TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_samples_at ON samples(collected_at);
@@ -92,6 +95,7 @@ CREATE TABLE IF NOT EXISTS supplier_ports (
  started_at TEXT NOT NULL,
  direction TEXT NOT NULL CHECK(direction IN ('downlink','uplink','both')),
  rate_rial_per_gb INTEGER NOT NULL DEFAULT 0 CHECK(rate_rial_per_gb>=0),
+ bytes_per_unit INTEGER NOT NULL DEFAULT 1073741824,
  ended_at TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_supplier_ports_account ON supplier_ports(account_id);
@@ -102,6 +106,7 @@ CREATE TABLE IF NOT EXISTS supplier_port_terms (
  started_at TEXT NOT NULL,
  direction TEXT NOT NULL CHECK(direction IN ('downlink','uplink','both')),
  rate_rial_per_gb INTEGER NOT NULL CHECK(rate_rial_per_gb>=0),
+ bytes_per_unit INTEGER NOT NULL DEFAULT 1073741824,
  UNIQUE(binding_id,started_at)
 );
 CREATE INDEX IF NOT EXISTS idx_supplier_terms_binding ON supplier_port_terms(binding_id,started_at);
@@ -188,6 +193,54 @@ def migrate_supplier_wallets(db):
        ON supplier_ports(node_id,port) WHERE ended_at=''""")
     db.execute('CREATE INDEX IF NOT EXISTS idx_provider_wallet_links_provider ON provider_wallet_links(provider)')
 
+
+def migrate_traffic_unit(db):
+    """One-time, transactional adoption of GiB for future pricing.
+
+    Raw Xray bytes, supplier volume checkpoint bytes and reconciliations are
+    immutable. Legacy per-GB cost terms retain their decimal divisor; a new
+    GiB-priced term starts from the migration instant for active bindings.
+    """
+    row=db.execute("SELECT value FROM settings WHERE key='traffic_unit'").fetchone()
+    if row is not None:
+        if row['value'] != TRAFFIC_UNIT:
+            raise ValueError('Unsupported persisted traffic unit: '+row['value'])
+        return
+    if db.in_transaction:
+        db.commit()
+    db.execute('BEGIN IMMEDIATE')
+    try:
+        sample_cols={r['name'] for r in db.execute('PRAGMA table_info(samples)')}
+        port_cols={r['name'] for r in db.execute('PRAGMA table_info(supplier_ports)')}
+        term_cols={r['name'] for r in db.execute('PRAGMA table_info(supplier_port_terms)')}
+        if 'rate_unit' not in sample_cols:
+            db.execute("ALTER TABLE samples ADD COLUMN rate_unit TEXT NOT NULL DEFAULT 'GB'")
+        if 'bytes_per_unit' not in port_cols:
+            db.execute("ALTER TABLE supplier_ports ADD COLUMN bytes_per_unit INTEGER NOT NULL DEFAULT 1000000000")
+        if 'bytes_per_unit' not in term_cols:
+            db.execute("ALTER TABLE supplier_port_terms ADD COLUMN bytes_per_unit INTEGER NOT NULL DEFAULT 1000000000")
+
+        now=datetime.now(timezone.utc).isoformat(timespec='microseconds')
+        active=db.execute("""SELECT p.id,p.direction,p.rate_rial_per_gb,
+            p.bytes_per_unit FROM supplier_ports p WHERE p.ended_at=''""").fetchall()
+        for p in active:
+            last=db.execute("""SELECT direction,rate_rial_per_gb,bytes_per_unit
+               FROM supplier_port_terms WHERE binding_id=?
+               ORDER BY started_at DESC,id DESC LIMIT 1""",(p['id'],)).fetchone()
+            source=last if last is not None else p
+            if source['bytes_per_unit']==BYTES_PER_GIB:
+                continue
+            db.execute("""INSERT INTO supplier_port_terms
+              (binding_id,started_at,direction,rate_rial_per_gb,bytes_per_unit)
+              VALUES(?,?,?,?,?)""",
+              (p['id'],now,source['direction'],source['rate_rial_per_gb'],BYTES_PER_GIB))
+        db.execute("INSERT INTO settings(key,value) VALUES('traffic_unit',?)",(TRAFFIC_UNIT,))
+        db.execute("INSERT INTO settings(key,value) VALUES('traffic_unit_adopted_at',?)",(now,))
+        db.commit()
+    except BaseException:
+        db.rollback()
+        raise
+
 def connect(db_file):
     db_file = Path(db_file)
     db_file.parent.mkdir(parents=True, exist_ok=True)
@@ -197,6 +250,7 @@ def connect(db_file):
     db.execute('PRAGMA journal_mode=WAL')
     db.executescript(DDL)
     migrate_supplier_wallets(db)
+    migrate_traffic_unit(db)
     return db
 
 
@@ -233,7 +287,7 @@ def insert_poll(db, payload, timestamp, settings):
                 direction = meta['bill_direction'] if meta else settings.get('default_bill_direction','downlink')
                 rate = float(meta['price_per_gb']) if meta else float(settings.get('default_price_per_gb',0))
                 bill = {'downlink': dd, 'uplink': du, 'both': dd + du}[direction]
-                cost = bill * rate / 1_000_000_000
+                cost = bill * rate / BYTES_PER_GIB
                 events = []
                 if changed: events.append('tag_changed')
                 if address_changed: events.append('address_changed')
@@ -257,9 +311,9 @@ def insert_poll(db, payload, timestamp, settings):
                 if settings.get('sparse_samples',False) and not du and not dd and event=='ok':
                     continue
                 db.execute('''INSERT INTO samples
-                (collected_at,node_id,node_name,port,tag,raw_up,raw_down,delta_up,delta_down,bill_bytes,rate_snapshot,cost,event)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                (timestamp,nid,node['node_name'],port,tag,p.get('uplink'),p.get('downlink'),du,dd,bill,rate,cost,event))
+                (collected_at,node_id,node_name,port,tag,raw_up,raw_down,delta_up,delta_down,bill_bytes,rate_snapshot,cost,rate_unit,event)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                (timestamp,nid,node['node_name'],port,tag,p.get('uplink'),p.get('downlink'),du,dd,bill,rate,cost,TRAFFIC_UNIT,event))
                 count += 1
         import json
         db.execute('INSERT INTO poll_runs(collected_at,node_count,sample_count,errors_json) VALUES(?,?,?,?)',
