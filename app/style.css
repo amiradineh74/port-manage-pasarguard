@@ -351,3 +351,30 @@ body dialog h2{padding-bottom:8px;border-bottom:1px solid var(--line)}
  .wallet-port-options{grid-template-columns:1fr}
  #provider-wallet-dialog{max-height:93dvh;width:98vw}
 }
+
+/* Provider reports are opened only on demand, reducing page height on mobile. */
+.provider-report-button{display:block;width:calc(100% - 10px);margin:3px 5px;
+ min-height:44px;text-align:center;font-weight:700}
+.provider-report-dialog{width:min(1250px,97vw);max-width:97vw;max-height:91dvh;
+ padding:18px;overflow-y:auto}
+.provider-report-dialog .table-scroll{max-height:68dvh;overflow:auto}
+.provider-report-dialog .section-head{align-items:start;gap:10px}
+.provider-report-dialog .report-filters{display:flex;align-items:center;gap:15px;
+ flex-wrap:wrap;padding:10px 0}
+.provider-report-dialog .report-filters input{max-width:270px}
+.wallet-reconciliations{border:1px solid var(--line);border-radius:9px;
+ padding:10px;margin-top:7px}
+.wallet-reconciliations summary{cursor:pointer;font-weight:650;font-size:13px;min-height:26px}
+.wallet-reconciliations .table-scroll{max-height:280px;overflow:auto}
+.wallet-month{display:flex;flex-wrap:wrap;gap:8px 16px;
+ padding:11px 5px;border-bottom:1px solid var(--line);font-size:12px;line-height:1.8}
+.wallet-month>strong{flex-basis:100%}
+.wallet-month>span{overflow-wrap:anywhere}
+.wallet-reconciliations td{font-size:12px;white-space:normal}
+@media(max-width:620px){
+ .provider-report-dialog{width:99vw;max-width:99vw;max-height:95dvh;padding:10px}
+ .provider-report-dialog .section-head{flex-direction:column}
+ .provider-report-dialog #provider-report-close{width:100%}
+ .provider-report-dialog .table-scroll{max-height:58dvh}
+ .wallet-month{flex-direction:column;gap:3px}
+}
