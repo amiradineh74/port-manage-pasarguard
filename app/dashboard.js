@@ -403,7 +403,6 @@ function openProviderWallet(provider,accountId=null){
   '<option value="'+a.id+'">'+escapeHtml(a.title)+' ('+walletAmount(a.estimated_balance,a.kind)+')</option>').join('');
  $('provider-wallet-mode').querySelector('option[value="existing"]').disabled=!candidates.length;
  renderProviderWalletPorts(provider,accountId);
- $('provider-wallet-existing').addEventListener('change',()=>renderProviderWalletPorts(provider,Number($('provider-wallet-existing').value)),{once:true});
  refreshProviderWalletForm();
  $('provider-wallet-dialog').showModal();
 }
@@ -438,6 +437,10 @@ function installWalletForms(){
  renderProviderWalletPorts($('provider-wallet-name').value,aid);
 });
  $('provider-wallet-kind').addEventListener('change',refreshProviderWalletForm);
+ $('provider-wallet-existing').addEventListener('change',()=>{
+  if($('provider-wallet-mode').value==='existing')
+   renderProviderWalletPorts($('provider-wallet-name').value,Number($('provider-wallet-existing').value));
+ });
  $('provider-wallet-cancel').addEventListener('click',()=>$('provider-wallet-dialog').close());
  $('provider-wallet-form').addEventListener('submit',e=>saveWalletRequest(e,'/api/providers/wallet',()=>{
   const mode=$('provider-wallet-mode').value,provider=$('provider-wallet-name').value;
