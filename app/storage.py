@@ -104,6 +104,17 @@ CREATE TABLE IF NOT EXISTS supplier_credits (
 );
 CREATE INDEX IF NOT EXISTS idx_supplier_credits_account ON supplier_credits(account_id);
 
+CREATE TABLE IF NOT EXISTS supplier_checks (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ account_id INTEGER NOT NULL REFERENCES supplier_accounts(id),
+ checked_at TEXT NOT NULL,
+ reported_amount INTEGER NOT NULL,
+ estimated_amount INTEGER NOT NULL,
+ difference INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_supplier_checks_account ON supplier_checks(account_id,checked_at);
+
+
 
 """
 
