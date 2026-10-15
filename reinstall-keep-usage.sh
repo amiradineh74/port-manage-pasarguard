@@ -26,7 +26,7 @@ echo '=== KEEP TRAFFIC VOLUME / RESET ONLY MONITOR CONFIGURATION ==='
 echo "App: $DIR"
 echo "Database: $DATA_DIR/traffic.sqlite3"
 echo 'Retain: every sample timestamp, node, port, down/up bytes, Xray counter baselines.'
-echo 'Reset: monitor display settings, provider labels, fixed expense entries, monetary snapshots and password/config.'
+echo 'Reset: display/provider settings, fixed expenses, supplier wallets/quotas, financial snapshots and password/config.'
 echo 'The standalone monitor web and timer will remain disabled until manually reconfigured.'
 echo 'PasarGuard, its accounting and node traffic are untouched.'
 read -r -p 'Type KEEP TRAFFIC RESET SETTINGS to confirm: ' ANSWER
@@ -73,6 +73,9 @@ with sqlite3.connect(str(source),timeout=30) as db:
     db.execute('DELETE FROM metadata')
     db.execute('DELETE FROM settings')
     db.execute('DELETE FROM fixed_expenses')
+    db.execute('DELETE FROM supplier_credits')
+    db.execute('DELETE FROM supplier_ports')
+    db.execute('DELETE FROM supplier_accounts')
     db.execute('DELETE FROM poll_runs')
     after=db.execute('SELECT COUNT(*),COALESCE(SUM(delta_down),0),COALESCE(SUM(delta_up),0) FROM samples').fetchone()
     assert before==after, 'Traffic volume changed; transaction rolled back.'
