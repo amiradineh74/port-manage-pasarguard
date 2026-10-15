@@ -60,7 +60,11 @@ vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8'),ctx,{filename:'dashboard.js'});
 (async()=>{
  await new Promise(resolve=>setImmediate(resolve));
- assert.equal(vm.runInContext("walletInputNumber('wallet-opening','money')",ctx),0);
+ elem('wallet-opening').value='243775';
+ assert.equal(vm.runInContext("walletInputNumber('wallet-opening','money')",ctx),2437750);
+ elem('wallet-opening').value='9.5';
+ assert.equal(vm.runInContext("walletInputNumber('wallet-opening','volume')",ctx),9500000000);
+ assert.ok(vm.runInContext("walletInputNumber('wallet-opening','money')",ctx)===undefined?false:true);
  vm.runInContext("state.wallets=[{id:11,title:'Test provider',kind:'money',bot_handle:'@sample',estimated_balance:2422750,opening_rial:2437750,opening_bytes:0,credited:0,spent_rial:15000,used_bytes:1250000000,reported_balance:null,started_at:'2026-10-14T00:00:00+00:00',ports:[],credit_history:[],check_history:[]}];renderWallets()",ctx);
  assert.ok(elem('wallets-list').innerHTML.includes('Test provider'));
  assert.ok(elem('wallets-list').innerHTML.includes('۲۴۲٬۲۷۵'));
