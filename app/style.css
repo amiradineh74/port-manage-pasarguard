@@ -306,3 +306,24 @@ body dialog h2{padding-bottom:8px;border-bottom:1px solid var(--line)}
  .wallet-card{padding:13px}
  #wallets .section-head>button{width:100%}
 }
+
+
+/* Provider credits are part of provider cards, not a duplicate page. */
+.provider-shell{min-width:0;background:var(--panel2);border:1px solid var(--line);
+ border-radius:12px;padding:7px;display:flex;flex-direction:column;gap:8px}
+.provider-shell>.provider-button{width:100%;flex:0 0 auto;min-width:0}
+.provider-credit{border-top:1px solid var(--line);padding:9px 5px 3px;display:flex;flex-direction:column;gap:7px}
+.provider-credit button{min-height:41px;white-space:normal}
+.provider-credit>small{font-size:11px;color:var(--muted);line-height:1.7}
+.provider-credit-total{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.provider-credit-total>span{font-size:11px;color:var(--muted)}
+.provider-credit-total strong{font-size:15px;color:var(--teal);overflow-wrap:anywhere;direction:ltr}
+.provider-credit-actions{display:flex;flex-wrap:wrap;gap:6px}
+.provider-credit-actions button{flex:1 1 100px;font-size:12px}
+.provider-credit .wallet-history{border-top:1px solid var(--line);padding-top:9px;max-height:240px;overflow:auto}
+.provider-credit .wallet-history summary{cursor:pointer;font-size:12px}
+#provider-wallet-dialog{width:min(540px,96vw);max-height:90dvh}
+#provider-wallet-dialog form{display:flex;flex-direction:column;gap:12px}
+#provider-wallet-dialog label{display:flex;flex-direction:column;gap:5px}
+#provider-wallet-dialog [hidden]{display:none!important}
+@media(max-width:620px){.providers{grid-template-columns:1fr}.provider-shell{padding:7px}.provider-credit{padding:8px}}
