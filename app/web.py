@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlsplit
 from zoneinfo import ZoneInfo
 
 from storage import connect
+from units import BYTES_PER_GIB, TRAFFIC_UNIT
 from fixed_costs import validate_expense, expenses_report, fixed_total
 from supplier_wallets import (wallet_report,create_account,update_account,attach_port,
     add_credit,report_balance,reconcile_balance,assign_provider_wallet,sync_provider_port)
@@ -114,7 +115,7 @@ def dashboard(params):
             # accounting stays untouched, including incorrectly entered old rates.
             p['billed']={'downlink':p['down'],'uplink':p['up'],
                          'both':p['down']+p['up']}[p['bill_direction']]
-            p['cost']=p['billed']*p['price_per_gb']/1_000_000_000
+            p['cost']=p['billed']*p['price_per_gb']/BYTES_PER_GIB
             combined.append(p)
         # Daily totals, aggregated at SQLite layer (UTC bucket; browser converts labels).
         times=db.execute('''SELECT substr(s.collected_at,1,10) day,
@@ -127,7 +128,7 @@ def dashboard(params):
              WHEN 'downlink' THEN s.delta_down
              WHEN 'uplink' THEN s.delta_up
              ELSE s.delta_up + s.delta_down END)
-             * COALESCE(m.price_per_gb,?) / 1000000000.0) cost,
+             * COALESCE(m.price_per_gb,?) / 1073741824.0) cost,
          SUM(s.cost) historical_cost
          FROM samples s LEFT JOIN metadata m ON m.node_id=s.node_id AND m.port=s.port
          WHERE s.collected_at>=? AND s.collected_at<?
@@ -151,7 +152,7 @@ def dashboard(params):
             WHEN 'downlink' THEN s.delta_down
             WHEN 'uplink' THEN s.delta_up
             ELSE s.delta_up+s.delta_down END)
-            * COALESCE(m.price_per_gb,?) / 1000000000.0) cost,
+            * COALESCE(m.price_per_gb,?) / 1073741824.0) cost,
           SUM(s.cost) historical_cost
           FROM samples s LEFT JOIN metadata m
             ON m.node_id=s.node_id AND m.port=s.port
@@ -191,7 +192,7 @@ def dashboard(params):
                 'timezone':preferences['timezone'],
                 'fixed_expenses':fixed_expenses,
                 'fixed_expenses_total_rial':fixed_total(fixed_expenses),
-                'wallets':wallet_report(db)}
+                'wallets':wallet_report(db), 'traffic_unit':TRAFFIC_UNIT}
 
 
 def csrf_for(token):return mac('csrf:'+token)
@@ -493,7 +494,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return self.send_json({'error':'شناسه نود یا پورت نامعتبر است'},400)
         query='''SELECT s.collected_at,s.node_name,s.node_id,s.port,s.tag,
-          s.raw_down,s.raw_up,s.delta_down,s.delta_up,s.bill_bytes,s.rate_snapshot,s.cost,s.event
+          s.raw_down,s.raw_up,s.delta_down,s.delta_up,s.bill_bytes,s.rate_snapshot,s.cost,s.event,s.rate_unit
           FROM samples s WHERE s.collected_at>=? AND s.collected_at<?'''
         vals=[begin,end]
         if nid:
@@ -502,7 +503,7 @@ class Handler(BaseHTTPRequestHandler):
             query+=' AND s.port=?';vals.append(int(port))
         query+=' ORDER BY s.collected_at,s.node_id,s.port LIMIT 150000'
         out=StringIO();w=csv.writer(out)
-        w.writerow(['زمان UTC','نود','شناسه نود','پورت','Tag','Downlink Raw B','Uplink Raw B','Downlink Delta B','Uplink Delta B','Billable Bytes','Recorded Rate Toman/GB','Recorded Cost Toman','Event','Recorded Rate Rial/GB','Recorded Cost Rial'])
+        w.writerow(['زمان UTC','نود','شناسه نود','پورت','Tag','Downlink Raw B','Uplink Raw B','Downlink Delta B','Uplink Delta B','Billable Bytes','Recorded Rate Toman/Unit','Recorded Cost Toman','Event','Recorded Rate Rial/Unit','Recorded Cost Rial','Pricing Unit'])
         with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
             for row in db.execute(query,vals):
                 fields=list(row)
@@ -510,7 +511,8 @@ class Handler(BaseHTTPRequestHandler):
                 for idx in (1,4,12):
                     if str(fields[idx]).startswith(('=','+','-','@','\t','\r')):fields[idx]="'"+str(fields[idx])
                 # Keep original legacy units for audit and add explicit Rial equivalents.
-                fields.extend((float(row[10])*10, float(row[11])*10))
+                fields.extend((float(row[10])*10, float(row[11])*10, row[13]))
+                fields.pop(13)  # keep the extra pricing-unit column at the end
                 w.writerow(fields)
         return self.send_bytes(('\ufeff'+out.getvalue()).encode('utf-8'),ctype='text/csv; charset=utf-8',
                                extra={'Content-Disposition':'attachment; filename="pasarguard-traffic.csv"'})
