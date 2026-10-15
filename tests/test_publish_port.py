@@ -16,7 +16,7 @@ class PublicPortChecks(unittest.TestCase):
     def run_check(self,listeners='',active='yes',pid='24880',port='8791',current_port='8791'):
         with tempfile.TemporaryDirectory() as tmp:
             ss=Path(tmp)/'ss'
-            ss.write_text('#!/usr/bin/env bash\\nprintf "%s" "$MOCK_SS"\\n')
+            ss.write_text('#!/usr/bin/env bash\nprintf "%s" "$MOCK_SS"\n')
             ss.chmod(0o755)
             systemctl=Path(tmp)/'systemctl'
             systemctl.write_text('''#!/usr/bin/env bash
@@ -59,7 +59,7 @@ PORT="""+port+"""
     def test_multiple_listeners_one_foreign_blocked(self):
         own='LISTEN 0 5 127.0.0.1:8791 0.0.0.0:* users:(("python3",pid=24880,fd=3))'
         foreign='LISTEN 0 5 91.107.254.186:8791 0.0.0.0:* users:(("another",pid=3001,fd=3))'
-        run=self.run_check(own+'\\n'+foreign)
+        run=self.run_check(own+'\n'+foreign)
         self.assertNotEqual(run.returncode,0)
         self.assertIn('not owned',run.stderr)
 
