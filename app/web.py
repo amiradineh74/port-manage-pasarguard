@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 from storage import connect
 from fixed_costs import validate_expense, expenses_report, fixed_total
 from supplier_wallets import (wallet_report,create_account,update_account,attach_port,
-    add_credit,report_balance)
+    add_credit,report_balance,assign_provider_wallet,sync_provider_port)
 
 CFG = None
 ROOT = Path(__file__).resolve().parent
@@ -289,6 +289,17 @@ class Handler(BaseHTTPRequestHandler):
             return self.redirect('/login',{'Set-Cookie':'pgtraffic_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict'})
         # These mutations affect only this independent monitor's SQLite,
         # never PasarGuard accounts, bots, or live Xray quota counters.
+        if path=='/api/providers/wallet':
+            try:
+                payload=json.loads(self.read_body())
+                with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
+                    with db:
+                        account_id=assign_provider_wallet(db,payload)
+                return self.send_json({'ok':True,'id':account_id})
+            except (ValueError,TypeError,KeyError,OverflowError) as exc:
+                return self.send_json({'error':str(exc)},400)
+            except __import__('sqlite3').IntegrityError:
+                return self.send_json({'error':'این ارائه‌دهنده قبلاً حساب اعتبار دارد'},400)
         if path in ('/api/wallets/create','/api/wallets/edit',
                     '/api/wallets/attach','/api/wallets/credit',
                     '/api/wallets/reported'):
@@ -427,6 +438,8 @@ class Handler(BaseHTTPRequestHandler):
                          bill_direction=excluded.bill_direction,enabled=excluded.enabled,notes=excluded.notes,
                          billing_since=excluded.billing_since''',
                          (nid,port,title,provider,rate,direction,enabled,notes,since))
+                        if provider:
+                            sync_provider_port(db,provider,nid,port,direction,rate)
                 return self.send_json({'ok':True,'message':'تغییرات ذخیره شد؛ تعرفه جدید از نمونه‌برداری بعدی اعمال می‌شود.'})
             except (ValueError,KeyError,TypeError,OverflowError) as e:
                 return self.send_json({'error':str(e)},400)
