@@ -104,6 +104,12 @@ CREATE TABLE IF NOT EXISTS supplier_credits (
 );
 CREATE INDEX IF NOT EXISTS idx_supplier_credits_account ON supplier_credits(account_id);
 
+CREATE TABLE IF NOT EXISTS supplier_provider_links (
+ provider TEXT PRIMARY KEY,
+ account_id INTEGER NOT NULL UNIQUE REFERENCES supplier_accounts(id),
+ default_direction TEXT NOT NULL CHECK(default_direction IN ('downlink','uplink','both')),
+ default_rate_rial_per_gb INTEGER NOT NULL DEFAULT 0 CHECK(default_rate_rial_per_gb>=0)
+);
 CREATE TABLE IF NOT EXISTS supplier_checks (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  account_id INTEGER NOT NULL REFERENCES supplier_accounts(id),
