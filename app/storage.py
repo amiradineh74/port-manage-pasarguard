@@ -95,6 +95,17 @@ CREATE TABLE IF NOT EXISTS supplier_ports (
  UNIQUE(node_id,port)
 );
 CREATE INDEX IF NOT EXISTS idx_supplier_ports_account ON supplier_ports(account_id);
+
+CREATE TABLE IF NOT EXISTS supplier_port_terms (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ binding_id INTEGER NOT NULL REFERENCES supplier_ports(id),
+ started_at TEXT NOT NULL,
+ direction TEXT NOT NULL CHECK(direction IN ('downlink','uplink','both')),
+ rate_rial_per_gb INTEGER NOT NULL CHECK(rate_rial_per_gb>=0),
+ UNIQUE(binding_id,started_at)
+);
+CREATE INDEX IF NOT EXISTS idx_supplier_terms_binding ON supplier_port_terms(binding_id,started_at);
+
 CREATE TABLE IF NOT EXISTS supplier_credits (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  account_id INTEGER NOT NULL REFERENCES supplier_accounts(id),
