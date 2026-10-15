@@ -71,6 +71,40 @@ CREATE TABLE IF NOT EXISTS fixed_expenses (
 );
 CREATE INDEX IF NOT EXISTS idx_fixed_expenses_dates ON fixed_expenses(start_date,end_date);
 
+CREATE TABLE IF NOT EXISTS supplier_accounts (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 128),
+ bot_handle TEXT NOT NULL DEFAULT '',
+ kind TEXT NOT NULL CHECK(kind IN ('money','volume')),
+ started_at TEXT NOT NULL,
+ opening_rial INTEGER NOT NULL DEFAULT 0 CHECK(opening_rial>=0),
+ opening_bytes INTEGER NOT NULL DEFAULT 0 CHECK(opening_bytes>=0),
+ reported_rial INTEGER,
+ reported_bytes INTEGER,
+ reported_at TEXT NOT NULL DEFAULT '',
+ notes TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS supplier_ports (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ account_id INTEGER NOT NULL REFERENCES supplier_accounts(id),
+ node_id INTEGER NOT NULL,
+ port INTEGER NOT NULL CHECK(port BETWEEN 1 AND 65535),
+ started_at TEXT NOT NULL,
+ direction TEXT NOT NULL CHECK(direction IN ('downlink','uplink','both')),
+ rate_rial_per_gb INTEGER NOT NULL DEFAULT 0 CHECK(rate_rial_per_gb>=0),
+ UNIQUE(node_id,port)
+);
+CREATE INDEX IF NOT EXISTS idx_supplier_ports_account ON supplier_ports(account_id);
+CREATE TABLE IF NOT EXISTS supplier_credits (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ account_id INTEGER NOT NULL REFERENCES supplier_accounts(id),
+ amount INTEGER NOT NULL CHECK(amount>0),
+ created_at TEXT NOT NULL,
+ note TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_supplier_credits_account ON supplier_credits(account_id);
+
+
 """
 
 def connect(db_file):
