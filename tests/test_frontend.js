@@ -23,7 +23,7 @@ const Jalali={...realJalali,attach(field,displayId){
   };
 }};
 const dashboardTemplate=fs.readFileSync(path.join(__dirname,'../app/dashboard.html'),'utf8');
-const navigationLabels=['نمای کلی','نمودار و ارائه‌دهندگان','گزارش پورت‌ها','مدیریت پورت‌ها','کیف پول و حجم خریداری‌شده','هزینه‌های ثابت','تنظیمات'];
+const navigationLabels=['نمای کلی','نمودار و ارائه‌دهندگان','گزارش پورت‌ها','مدیریت پورت‌ها','هزینه‌های ثابت','تنظیمات'];
 for(const name of navigationLabels)assert.ok(dashboardTemplate.includes('>'+name+'</a>'),'missing navigation: '+name);
 assert.ok(dashboardTemplate.indexOf('id="expenses"')>dashboardTemplate.indexOf('id="manage"'),
  'Fixed costs must follow management/settings section');
@@ -31,7 +31,7 @@ assert.ok(dashboardTemplate.includes('class="expense-formula"'));
 assert.ok(dashboardTemplate.includes('id="main-nav"'));
 assert.ok(dashboardTemplate.includes('id="nav-toggle"'));
 assert.ok(dashboardTemplate.includes('id="nav-backdrop"'));
-for(const id of ['wallets-list','wallet-new','wallet-create-dialog','wallet-port-dialog','wallet-credit-dialog','wallet-reported-dialog']){
+for(const id of ['provider-wallet-dialog','provider-wallet-name','provider-wallet-opening','wallet-credit-dialog','wallet-reported-dialog']){
  assert.ok(dashboardTemplate.includes('id="'+id+'"'),'missing supplier UI: '+id);
 }
 const css=fs.readFileSync(path.join(__dirname,'../app/style.css'),'utf8');
@@ -60,15 +60,16 @@ vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8'),ctx,{filename:'dashboard.js'});
 (async()=>{
  await new Promise(resolve=>setImmediate(resolve));
- elem('wallet-opening').value='243775';
- assert.equal(vm.runInContext("walletInputNumber('wallet-opening','money')",ctx),2437750);
- elem('wallet-opening').value='9.5';
- assert.equal(vm.runInContext("walletInputNumber('wallet-opening','volume')",ctx),9500000000);
- assert.throws(()=>vm.runInContext("walletInputNumber('wallet-opening','money')",ctx));
- vm.runInContext("state.wallets=[{id:11,title:'Test provider',kind:'money',bot_handle:'@sample',estimated_balance:2422750,opening_rial:2437750,opening_bytes:0,credited:0,spent_rial:15000,used_bytes:1250000000,reported_balance:null,started_at:'2026-10-14T00:00:00+00:00',ports:[],credit_history:[],check_history:[]}];renderWallets()",ctx);
- assert.ok(elem('wallets-list').innerHTML.includes('Test provider'));
- assert.ok(elem('wallets-list').innerHTML.includes('۲۴۲٬۲۷۵'));
- vm.runInContext("state.wallets=[];renderWallets()",ctx);
+ elem('provider-wallet-opening').value='243775';
+ assert.equal(vm.runInContext("walletInputNumber('provider-wallet-opening','money')",ctx),2437750);
+ elem('provider-wallet-opening').value='9.5';
+ assert.equal(vm.runInContext("walletInputNumber('provider-wallet-opening','volume')",ctx),9500000000);
+ assert.throws(()=>vm.runInContext("walletInputNumber('provider-wallet-opening','money')",ctx));
+ vm.runInContext("state.wallets=[{id:11,provider:'A',title:'A',kind:'money',bot_handle:'@sample',estimated_balance:2422750,opening_rial:2437750,opening_bytes:0,credited:0,spent_rial:15000,used_bytes:1250000000,reported_balance:null,started_at:'2026-10-14T00:00:00+00:00',ports:[],credit_history:[],check_history:[]}];renderProviderPanels()",ctx);
+ assert.ok(elem('providers').innerHTML.includes('۲۴۲٬۲۷۵'));
+ assert.ok(elem('providers').innerHTML.includes('provider-credit'));
+ vm.runInContext("state.wallets=[];renderProviderPanels()",ctx);
+ assert.ok(elem('providers').innerHTML.includes('تعریف موجودی پولی / حجم'));
  assert.equal(elem('main-nav').dataset.open,'false');
  assert.equal(elem('nav-toggle').attributes['aria-expanded'],'false');
  vm.runInContext('setNavigationOpen(true)',ctx);
