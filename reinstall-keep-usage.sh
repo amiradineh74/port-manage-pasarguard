@@ -76,6 +76,7 @@ with sqlite3.connect(str(source),timeout=30) as db:
     db.execute('DELETE FROM supplier_checks')
     db.execute('DELETE FROM supplier_credits')
     db.execute('DELETE FROM supplier_ports')
+    db.execute('DELETE FROM provider_wallet_links')
     db.execute('DELETE FROM supplier_accounts')
     db.execute('DELETE FROM poll_runs')
     after=db.execute('SELECT COUNT(*),COALESCE(SUM(delta_down),0),COALESCE(SUM(delta_up),0) FROM samples').fetchone()
