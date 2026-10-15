@@ -1,7 +1,8 @@
 <!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>مدیریت ترافیک پورت‌ها</title><link rel="stylesheet" href="/style.css"></head>
 <body><main class="wrap">
 <header class="header"><div><div class="eyebrow">PASARGUARD TRAFFIC MONITOR · V1.0</div><h1 id="title">مدیریت مصرف و هزینه پورت‌ها</h1><p class="sub">مانیتورینگ مستقل و فقط‌خواندنی از PasarGuard</p></div><div class="header-actions"><label class="theme-picker">ظاهر پنل <select id="theme-select" aria-label="انتخاب تم داشبورد"><option value="night">شب آبی</option><option value="graphite">گرافیت</option><option value="arctic">یخی روشن</option><option value="forest">جنگلی</option><option value="sunset">کویر روشن</option></select></label><button id="logout" class="minor">خروج از حساب</button></div></header>
-<nav class="section-nav" aria-label="دسترسی سریع به بخش‌های پنل">
+<nav class="section-nav" id="main-nav" aria-label="دسترسی سریع به بخش‌های پنل">
+<div class="nav-heading"><strong>بخش‌های پنل</strong><span>Traffic Monitor</span></div>
 <a href="#overview">نمای کلی</a>
 <a href="#providers-section">نمودار و ارائه‌دهندگان</a>
 <a href="#ports-section">گزارش پورت‌ها</a>
@@ -9,6 +10,8 @@
 <a href="#expenses">هزینه‌های ثابت</a>
 <a href="#settings-section">تنظیمات</a>
 </nav>
+<button class="nav-backdrop" id="nav-backdrop" type="button" aria-label="بستن منوی بخش‌ها" hidden></button>
+<button class="nav-toggle" id="nav-toggle" type="button" aria-controls="main-nav" aria-expanded="false">☰ بخش‌ها</button>
 <section class="toolbar" id="overview">
 <label class="jfield">از تاریخ (شمسی)<input id="from-label" class="jinput" readonly aria-label="انتخاب تاریخ شروع شمسی" placeholder="۱۴۰۵/۰۷/۲۲"><input type="hidden" id="from"><div id="from-calendar" class="jcalendar" hidden></div></label>
 <label class="jfield">تا تاریخ (شمسی)<input id="to-label" class="jinput" readonly aria-label="انتخاب تاریخ پایان شمسی" placeholder="۱۴۰۵/۰۷/۲۲"><input type="hidden" id="to"><div id="to-calendar" class="jcalendar" hidden></div></label><button id="reload" class="primary">به‌روزرسانی</button><a class="minor linkbutton" id="export" href="#">خروجی CSV</a></section>
