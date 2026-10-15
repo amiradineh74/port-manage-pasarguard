@@ -88,10 +88,10 @@ class WalletTests(unittest.TestCase):
         self.assertEqual(receipt['adjustment'],-10*GiB)
         self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],220*GiB)
         self.poll(5*GiB,GiB//2,'2026-10-14T01:02:00+00:00')
-        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],218000000000)
+        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],218*GiB)
         with patch.object(wallets,'utc_now',return_value='2026-10-14T01:03:00+00:00'):
             wallets.add_credit(self.db,{'account_id':aid,'amount':10*GiB})
-        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],228000000000)
+        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],228*GiB)
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM supplier_credits').fetchone()[0],1)
 
     def test_provider_uses_existing_metadata_and_legacy_balances(self):
