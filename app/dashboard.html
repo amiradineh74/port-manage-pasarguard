@@ -5,7 +5,7 @@
 <div class="nav-heading"><strong>بخش‌های پنل</strong><span>Traffic Monitor</span></div>
 <a href="#overview">نمای کلی</a>
 <a href="#providers-section">نمودار و ارائه‌دهندگان</a>
-<a href="#ports-section">گزارش پورت‌ها</a>
+<a href="#ports-section" id="open-all-port-report">گزارش پورت‌ها</a>
 <a href="#manage">مدیریت پورت‌ها</a>
 <a href="#expenses">هزینه‌های ثابت</a>
 <a href="#settings-section">تنظیمات</a>
@@ -28,7 +28,7 @@
 <div id="chart" class="chart"><span>در حال آماده‌سازی نمودار...</span></div>
 <div class="section-head cost-heading"><div><h2>نمودار تاریخی هزینه با تعرفه فعلی</h2><p>بازه انتخاب‌شده و ارائه‌دهنده / نود انتخابی؛ مبلغ ریالی یا تومانی متناسب با تنظیمات</p></div></div>
 <div id="cost-chart" class="chart"><span>در حال آماده‌سازی نمودار...</span></div></section>
-<section class="panel" id="ports-section"><div class="section-head"><div><h2>فهرست پورت‌ها</h2><p>هویت هر مسیر: شناسه سرور + شماره پورت. Tag صرفاً برای تطبیق با Xray است.</p></div><div><label>جست‌وجو <input id="search" placeholder="نام، پورت، ارائه‌دهنده..."></label> <label class="check"><input id="show_hidden" type="checkbox"> نمایش پورت‌های خارج‌شده</label></div></div><div class="table-scroll"><table><thead><tr><th>سرور / پورت</th><th>نام دلخواه / ارائه‌دهنده</th><th>دانلود</th><th>آپلود</th><th>هزینه با نرخ فعلی / ثبت‌شده قبلی</th><th>آخرین آمار</th><th>تنظیمات</th></tr></thead><tbody id="ports"><tr><td colspan="7">در حال بارگیری...</td></tr></tbody></table></div></section>
+<dialog id="ports-section" class="port-report-dialog" aria-labelledby="port-report-title"><div class="port-report-bar"><strong>گزارش اختصاصی پورت‌ها</strong><button id="port-report-close" class="minor" type="button">بستن</button></div><div class="section-head"><div><h2 id="port-report-title">فهرست پورت‌ها</h2><p>هویت هر مسیر: شناسه سرور + شماره پورت. Tag صرفاً برای تطبیق با Xray است.</p></div><div><label>جست‌وجو <input id="search" placeholder="نام، پورت، ارائه‌دهنده..."></label> <label class="check"><input id="show_hidden" type="checkbox"> نمایش پورت‌های خارج‌شده</label></div></div><div class="table-scroll"><table><thead><tr><th>سرور / پورت</th><th>نام دلخواه / ارائه‌دهنده</th><th>دانلود</th><th>آپلود</th><th>هزینه با نرخ فعلی / ثبت‌شده قبلی</th><th>آخرین آمار</th><th>تنظیمات</th></tr></thead><tbody id="ports"><tr><td colspan="7">در حال بارگیری...</td></tr></tbody></table></div></dialog>
 <section class="panel" id="manage">
   <div class="section-head"><div><h2>مدیریت پورت‌ها و تنظیمات</h2>
     <p>بدون دستور ترمینال: انتخاب پورت‌های هر سرور و تنظیم عنوان و اطلاعات گزارش‌ها</p></div></div>
@@ -111,11 +111,13 @@
 <div class="buttons"><button type="button" class="minor" id="wallet-credit-cancel">انصراف</button><button type="submit" class="primary">ثبت شارژ/حجم</button></div>
 </form></dialog>
 <dialog id="wallet-reported-dialog"><form id="wallet-reported-form" method="dialog">
-<h2>ثبت مانده اعلام‌شده ربات برای مقایسه</h2>
+<h2>همسان‌سازی مانده حساب با ربات</h2>
 <input type="hidden" id="wallet-reported-account">
-<label>موجودی اعلام‌شده به <span id="wallet-reported-unit">تومان</span><input type="number" id="wallet-reported-amount" min="0" step="any" required></label>
-<p class="sub">این مقدار فقط برای مقایسه ذخیره می‌شود؛ کیف پول تخمینی را شارژ یا اصلاح نمی‌کند. بهتر است بعد از نمونه‌برداری مانده ربات را وارد کنی تا دو زمان به هم نزدیک باشند.</p>
-<div class="buttons"><button class="minor" type="button" id="wallet-reported-cancel">انصراف</button><button class="primary" type="submit">ثبت مانده مرجع</button></div>
+<label>موجودی واقعی ربات به <span id="wallet-reported-unit">تومان</span><input type="number" id="wallet-reported-amount" min="0" step="any" required></label>
+<p class="sub">مانده پنل به عدد واقعی ربات تنظیم می‌شود. اختلاف به‌عنوان اصلاح مستقل ثبت و در سابقه همین حساب نگهداری خواهد شد؛ شارژها، هزینه‌ها و ترافیک گذشته تغییر نمی‌کنند. مانده ربات را ترجیحاً پس از آخرین نمونه‌برداری وارد کن.</p>
+<p id="wallet-reported-preview" class="reconcile-preview" aria-live="polite"></p>
+<label>توضیح (اختیاری)<input id="wallet-reported-note" maxlength="250" placeholder="مثلاً اصلاح اختلاف مصرف دوره"></label>
+<div class="buttons"><button class="minor" type="button" id="wallet-reported-cancel">انصراف</button><button class="primary" type="submit">تأیید همسان‌سازی</button></div>
 </form></dialog>
 <script src="/jalali.js"></script>
 <script src="/dashboard.js"></script>
