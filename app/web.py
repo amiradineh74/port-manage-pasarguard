@@ -20,6 +20,7 @@ from zoneinfo import ZoneInfo
 from storage import connect
 from units import selected_unit, selected_bytes_per_unit
 from fixed_costs import validate_expense, expenses_report, fixed_total
+from sales_reporting import save_daily_sale, financial_days
 from supplier_wallets import (wallet_report,create_account,update_account,attach_port,
     add_credit,report_balance,reconcile_balance,assign_provider_wallet,sync_provider_port)
 
@@ -259,6 +260,20 @@ class Handler(BaseHTTPRequestHandler):
                 data['csrf']=csrf_for(token)
                 return self.send_json(data)
             except ValueError as e:return self.send_json({'error':str(e)},400)
+        if path=='/api/finance/report':
+            try:
+                params=parse_qs(urlsplit(self.path).query)
+                with connect(Path(CFG['data_dir'])/'traffic.sqlite3',CFG.get('traffic_unit')) as db:
+                    prefs=display_preferences(db)
+                    today=datetime.now(ZoneInfo(prefs['timezone'])).date()
+                    lo=params.get('from',[(today-timedelta(days=30)).isoformat()])[0]
+                    hi=params.get('to',[today.isoformat()])[0]
+                    result=financial_days(db,lo,hi,prefs['timezone'],
+                        CFG.get('default_bill_direction','downlink'),
+                        CFG.get('default_price_per_gb',0))
+                    return self.send_json(result)
+            except (ValueError,KeyError) as exc:
+                return self.send_json({'error':str(exc)},400)
         if path=='/api/export.csv':return self.export_csv(parse_qs(urlsplit(self.path).query))
         if path=='/api/expenses.csv':return self.export_expenses_csv(parse_qs(urlsplit(self.path).query))
         return self.send_json({'error':'یافت نشد'},404)
@@ -291,6 +306,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.redirect('/login',{'Set-Cookie':'pgtraffic_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict'})
         # These mutations affect only this independent monitor's SQLite,
         # never PasarGuard accounts, bots, or live Xray quota counters.
+        if path=='/api/finance/sale':
+            try:
+                obj=json.loads(self.read_body())
+                with connect(Path(CFG['data_dir'])/'traffic.sqlite3',CFG.get('traffic_unit')) as db:
+                    prefs=display_preferences(db)
+                    result=save_daily_sale(db,obj,prefs['timezone'])
+                return self.send_json({'ok':True,'entry':result})
+            except (ValueError,TypeError,KeyError,OverflowError) as exc:
+                return self.send_json({'error':str(exc)},400)
         if path=='/api/providers/wallet':
             try:
                 payload=json.loads(self.read_body())
