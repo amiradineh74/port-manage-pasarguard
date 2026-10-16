@@ -378,3 +378,124 @@ body dialog h2{padding-bottom:8px;border-bottom:1px solid var(--line)}
  .provider-report-dialog .table-scroll{max-height:58dvh}
  .wallet-month{flex-direction:column;gap:3px}
 }
+
+/* v2.1 provider directory: one compact full-width row per supplier.
+   Wallet information remains accessible without stretching adjacent cards. */
+.providers{
+ display:flex;flex-direction:column;gap:12px;align-items:stretch;
+}
+.provider-shell{
+ padding:0;gap:0;overflow:hidden;display:block;
+ border:1px solid var(--line);border-radius:15px;
+ background:var(--panel2);transition:border-color .16s ease,box-shadow .16s ease;
+}
+.provider-shell:hover{border-color:var(--field-line)}
+.provider-shell.provider-shell-active{
+ border-color:var(--teal);box-shadow:inset 3px 0 0 var(--teal);
+}
+.provider-overview{
+ display:grid;grid-template-columns:minmax(0,1fr) 178px;align-items:stretch;
+}
+.provider-shell .provider-overview .provider-button{
+ display:flex;flex-direction:column;gap:11px;align-items:stretch;
+ min-width:0;width:100%;min-height:0;flex:0 1 auto;
+ text-align:right;padding:15px 18px;background:transparent;
+ border:0;border-radius:0;outline:none;box-shadow:none;
+}
+.provider-shell .provider-overview .provider-button:hover{background:var(--provider-hover)}
+.provider-shell .provider-overview .provider-button.selected{background:var(--provider-selected)}
+.provider-shell .provider-overview .provider-button:focus-visible{
+ outline:2px solid var(--blue);outline-offset:-3px;
+}
+.provider-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
+.provider-heading strong{margin:0;font-size:16px;line-height:1.5;overflow-wrap:anywhere}
+.provider-port-count{
+ flex:0 0 auto;font-size:11px;color:var(--muted);
+ border:1px solid var(--line);padding:5px 9px;border-radius:999px;
+}
+.provider-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;width:100%}
+.provider-stat{
+ min-width:0;display:flex;flex-direction:column;gap:5px;
+ border:1px solid var(--line);border-radius:10px;
+ padding:10px 12px;background:var(--panel);
+}
+.provider-stat small{display:block;margin:0;color:var(--muted);font-size:11px;line-height:1.4}
+.provider-stat b{font-size:13px;font-weight:700;color:var(--text);line-height:1.6;overflow-wrap:anywhere}
+.provider-stat:last-child b{color:var(--teal)}
+.provider-fixed-note{font-size:11px;color:var(--muted);text-align:right;line-height:1.4}
+.provider-tools{
+ border-right:1px solid var(--line);padding:13px;display:flex;
+ align-items:center;justify-content:center;
+}
+.provider-shell .provider-report-button{
+ width:100%;margin:0;min-height:48px;max-height:76px;
+ border-radius:10px;background:var(--panel);font-size:12px;
+}
+.provider-account-fold{border-top:1px solid var(--line)}
+.provider-account-summary{
+ cursor:pointer;list-style:none;display:flex;align-items:center;
+ gap:13px;padding:13px 18px;min-width:0;
+ background:var(--panel);transition:background .16s ease;
+}
+.provider-account-summary::-webkit-details-marker{display:none}
+.provider-account-summary::marker{content:''}
+.provider-account-summary:hover{background:var(--provider-hover)}
+.provider-account-summary:focus-visible{outline:2px solid var(--blue);outline-offset:-3px}
+.provider-account-heading{display:flex;flex:0 0 auto;align-items:center;gap:8px}
+.provider-account-heading strong{font-size:12px}
+.provider-account-heading small{
+ font-size:11px;color:var(--muted);border:1px solid var(--line);
+ border-radius:999px;padding:3px 7px;
+}
+.provider-balance-preview{
+ flex:1;display:flex;flex-wrap:wrap;justify-content:flex-end;
+ align-items:center;gap:7px;min-width:0;font-size:11px;color:var(--muted);
+}
+.provider-balance-chip{
+ display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px;
+ background:var(--panel2);border:1px solid var(--line);
+ padding:6px 9px;border-radius:9px;max-width:100%;
+}
+.provider-balance-chip>span{color:var(--muted);overflow-wrap:anywhere}
+.provider-balance-chip>strong{color:var(--teal);font-size:12px;overflow-wrap:anywhere}
+.provider-more-accounts{color:var(--muted);padding:5px}
+.provider-account-chevron{
+ color:var(--teal);font-size:18px;line-height:1;
+ transition:transform .16s ease;
+}
+.provider-account-fold[open] .provider-account-chevron{transform:rotate(180deg)}
+.provider-shell .provider-credit{
+ display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,310px),1fr));
+ align-items:stretch;gap:12px;border-top:1px solid var(--line);
+ background:var(--panel2);padding:15px;
+}
+.provider-shell .provider-wallet-account{
+ display:flex;flex-direction:column;gap:8px;
+ background:var(--panel);border-color:var(--line);
+ border-radius:12px;padding:15px;min-height:0;
+}
+.provider-shell .provider-wallet-account>strong{font-size:14px}
+.provider-shell .provider-wallet-account .provider-credit-actions{margin-top:auto;padding-top:8px}
+.provider-shell .provider-credit>.provider-credit-create{
+ grid-column:1/-1;justify-self:stretch;width:100%;
+ min-height:43px;border:1px dashed var(--field-line);
+}
+@media(max-width:850px){
+ .providers{display:flex;flex-direction:column}
+ .provider-overview{grid-template-columns:minmax(0,1fr) 145px}
+ .provider-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .provider-shell .provider-overview .provider-button{min-height:0}
+}
+@media(max-width:620px){
+ .provider-overview{grid-template-columns:1fr}
+ .provider-tools{border-right:0;border-top:1px solid var(--line);padding:8px 12px}
+ .provider-shell .provider-report-button{min-height:40px;max-height:none}
+ .provider-shell .provider-overview .provider-button{padding:13px}
+ .provider-account-summary{flex-wrap:wrap;gap:9px;padding:12px}
+ .provider-balance-preview{order:3;flex-basis:100%;justify-content:flex-start}
+ .provider-account-chevron{margin-right:auto}
+ .provider-shell .provider-credit{grid-template-columns:1fr;padding:10px}
+}
+@media(prefers-reduced-motion:reduce){
+ .provider-shell,.provider-account-summary,.provider-account-chevron{transition:none}
+}
