@@ -98,6 +98,9 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  assert.ok(elem('providers').innerHTML.includes('جزئیات و گزارش پورت‌ها'));
  vm.runInContext("openProviderReport('A')",ctx);
  assert.ok(elem('provider-report-title').textContent.includes('A'));
+ assert.ok(elem('ports').innerHTML.includes('unassign-port'));
+ assert.ok(elem('ports').innerHTML.includes('حذف از ارائه‌دهنده'));
+
  assert.ok(elem('ports').innerHTML.includes('Germany'));
  assert.ok(elem('ports').innerHTML.includes('Turkey'));
  vm.runInContext("state.wallets=[];renderProviderPanels()",ctx);
