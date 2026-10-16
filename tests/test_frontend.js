@@ -32,6 +32,8 @@ assert.ok(dashboardTemplate.includes('id="main-nav"'));
 assert.ok(dashboardTemplate.includes('id="nav-toggle"'));
 assert.ok(dashboardTemplate.includes('id="nav-backdrop"'));
 assert.ok(dashboardTemplate.includes('id="provider-report-dialog"'));
+assert.ok(dashboardTemplate.includes('<th>قیمت واحد (فعلی)</th>'));
+assert.ok(dashboardTemplate.includes('<tbody id="ports"><tr><td colspan="8">'));
 assert.ok(dashboardTemplate.includes('id="rate-volume-unit"'));
 assert.ok(!dashboardTemplate.includes('تعرفه هر GB (یک میلیارد بایت)'))
 assert.ok(!dashboardTemplate.includes('id="ports-section"'));
@@ -50,7 +52,7 @@ const daily=[
 ];
 const ports=[
  {node_id:3,node_name:'Turkey',port:8443,provider:'A',title:'A',tag:'t',down:3000000000,up:500000000,billed:3500000000,cost:210.234,historical_cost:35,total_down:1,total_up:1,enabled:1,price_per_gb:850,bill_direction:'both',notes:'',billing_since:'2026-10-14T00:00:00Z'},
- {node_id:7,node_name:'Germany',port:2053,provider:'A',title:'B',tag:'g',down:3000000000,up:100000000,billed:3100000000,cost:250.5,historical_cost:25,total_down:1,total_up:1,enabled:1,price_per_gb:850,bill_direction:'both',notes:'',billing_since:''}
+ {node_id:7,node_name:'Germany',port:2053,provider:'A',title:'B',tag:'g',down:3000000000,up:100000000,billed:3100000000,cost:250.5,historical_cost:25,total_down:1,total_up:1,enabled:1,price_per_gb:1200,bill_direction:'both',notes:'',billing_since:''}
 ];
 const data={ports,daily_by_provider:daily,hourly_by_provider:[],hourly_available:true,
  providers:{A:{down:6000000000,up:600000000,billed:6600000000,cost:460.734,historical_cost:60}},
@@ -100,6 +102,17 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  assert.ok(elem('provider-report-title').textContent.includes('A'));
  assert.ok(elem('ports').innerHTML.includes('unassign-port'));
  assert.ok(elem('ports').innerHTML.includes('حذف از ارائه‌دهنده'));
+ // Each port displays its own CURRENT rate; formatting follows global unit
+ // chosen during installation and currency currently shown in the panel.
+ assert.ok(elem('ports').innerHTML.includes('۸٬۵۰۰ ریال / GiB'));
+ assert.ok(elem('ports').innerHTML.includes('۱۲٬۰۰۰ ریال / GiB'));
+ vm.runInContext("state.currency='تومان';renderPortReport()",ctx);
+ assert.ok(elem('ports').innerHTML.includes('۸۵۰ تومان / GiB'));
+ assert.ok(elem('ports').innerHTML.includes('۱٬۲۰۰ تومان / GiB'));
+ vm.runInContext("state.traffic_unit='GB';renderPortReport()",ctx);
+ assert.ok(elem('ports').innerHTML.includes('۸۵۰ تومان / GB'));
+ assert.ok(elem('ports').innerHTML.includes('۱٬۲۰۰ تومان / GB'));
+ vm.runInContext("state.currency='ریال';state.traffic_unit='GiB';renderPortReport()",ctx);
 
  assert.ok(elem('ports').innerHTML.includes('Germany'));
  assert.ok(elem('ports').innerHTML.includes('Turkey'));
