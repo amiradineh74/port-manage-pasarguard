@@ -20,6 +20,7 @@ from zoneinfo import ZoneInfo
 from storage import connect
 from units import selected_unit, selected_bytes_per_unit
 from fixed_costs import validate_expense, expenses_report, fixed_total
+from persian_calendar import from_date
 from sales_reporting import save_daily_sale, financial_days
 from supplier_wallets import (wallet_report,create_account,update_account,attach_port,
     add_credit,report_balance,reconcile_balance,assign_provider_wallet,sync_provider_port)
@@ -525,11 +526,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({'error':str(exc)},400)
         out=StringIO();writer=csv.writer(out)
         writer.writerow(['عنوان هزینه','دسته','نوع تخصیص','Node ID','ارائه‌دهنده',
-                         'دوره','مبلغ پایه ریال','تاریخ شروع ISO','تاریخ پایان ISO',
+                         'دوره','مبلغ پایه ریال','تاریخ شروع شمسی','تاریخ پایان شمسی',
                          'هزینه در بازه ریال','یادداشت'])
         for e in expenses:
+            to_jalali=lambda value: ('%04d/%02d/%02d' % from_date(date.fromisoformat(value))) if value else ''
             fields=[e['label'],e['category'],e['scope'],e['node_id'],e['provider'],
-                    e['frequency'],e['amount_rial'],e['start_date'],e['end_date'],
+                    e['frequency'],e['amount_rial'],to_jalali(e['start_date']),to_jalali(e['end_date']),
                     round(e['period_rial']),e['note']]
             for i in (0,1,2,4,5,10):
                 if isinstance(fields[i],str) and fields[i].startswith(('=','+','-','@','\t','\r')):

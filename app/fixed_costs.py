@@ -1,12 +1,12 @@
-"""Cost accounting using only the independent SQLite fixed_expenses table.
+"""Recurring fixed-cost accounting in Solar Hijri months, estimated per 30 days.
 
-Monthly fixed charges use Gregorian calendar months and are prorated by inclusive
-days within the selected reporting range. Payment cadence and currency are not
-inferred from Xray counters; amounts are integer IRR.
+Rates are user-entered IRR/month; each covered local calendar day carries 1/30
+of that amount, regardless of a Persian month's actual 29/30/31-day length.
+This is a daily management ESTIMATE, not a monthly invoice reconciliation.
+All SQLite date keys stay ISO Gregorian and UI dates remain Persian.
 """
-import calendar
 from datetime import date,timedelta
-from math import isfinite
+from persian_calendar import from_date, month_start, following_month
 
 VALID_SCOPES={'node','provider','general'}
 VALID_FREQUENCIES={'monthly','once'}
@@ -59,53 +59,46 @@ def validate_expense(obj,node_ids):
       'amount_rial':amount,'start_date':start.isoformat(),
       'end_date':end.isoformat() if end else '', 'note':note.strip()}
 
-def month_after(day):
-    y=day.year+(day.month==12)
-    m=day.month%12+1
-    return date(y,m,1)
-
-def charge_in_range(expense,lo,hi):
-    """Calculate a fixed expense in IRR for inclusive local calendar dates."""
-    start=date_value(expense['start_date'])
-    end=date_value(expense['end_date'],False)
-    a=max(date_value(lo),start)
-    b=min(date_value(hi),end) if end else date_value(hi)
-    if a>b:return 0
-    amount=expense['amount_rial']
-    if expense['frequency']=='once':
-        return amount if a<=start<=b else 0
-    result=0.0
-    cursor=a
-    while cursor<=b:
-        following=month_after(cursor)
-        segment_end=min(b,following-timedelta(days=1))
-        days=(segment_end-cursor).days+1
-        result+=amount*days/calendar.monthrange(cursor.year,cursor.month)[1]
-        cursor=following
-    return round(result,2)
-
 def expense_breakdown(expense,lo,hi):
-    """Small audit description per covered Gregorian month (no DB writes)."""
+    """Audit entries split at actual Solar Hijri month boundaries.
+
+    'month_days'=30 is the fixed accounting divisor. 'calendar_days' is
+    supplied separately so 29/31-day months are not misrepresented.
+    """
     start=date_value(expense['start_date'])
     until=date_value(expense['end_date'],False)
-    a=max(date_value(lo),start)
-    b=min(date_value(hi),until) if until else date_value(hi)
+    lower=date_value(lo)
+    upper=date_value(hi)
+    if lower>upper:return []
+    a=max(lower,start)
+    b=min(upper,until) if until else upper
     if a>b:return []
     if expense['frequency']=='once':
+        if not lower<=start<=upper:return []
         return [{'frequency':'once','date':start.isoformat(),
                  'rial':expense['amount_rial']}]
-    parts=[]
-    cursor=a
-    while cursor<=b:
-        next_month=month_after(cursor)
-        last=min(b,next_month-timedelta(days=1))
-        count=(last-cursor).days+1
-        month_days=calendar.monthrange(cursor.year,cursor.month)[1]
-        parts.append({'frequency':'monthly','month':cursor.strftime('%Y-%m'),
-                      'covered_days':count,'month_days':month_days,
-                      'rial':round(expense['amount_rial']*count/month_days,2)})
-        cursor=next_month
-    return parts
+    entries=[]
+    current=a
+    while current<=b:
+        jy,jm,_=from_date(current)
+        following_year,following_number=following_month(jy,jm)
+        following_start=month_start(following_year,following_number)
+        actual_days=(following_start-month_start(jy,jm)).days
+        last=min(b,following_start-timedelta(days=1))
+        covered=(last-current).days+1
+        entries.append({
+            'frequency':'monthly','month':f'{jy:04d}/{jm:02d}',
+            'covered_days':covered,'month_days':30,
+            'calendar_days':actual_days,
+            'rial':round(expense['amount_rial']*covered/30,2)})
+        current=following_start
+    return entries
+
+
+def charge_in_range(expense,lo,hi):
+    """Fixed expense share (IRR) for inclusive days in a Solar Hijri period."""
+    return round(sum(part['rial'] for part in expense_breakdown(expense,lo,hi)),2)
+
 
 def expenses_report(db,lo,hi):
     expenses=[dict(r) for r in db.execute('SELECT * FROM fixed_expenses ORDER BY scope,label,id')]
