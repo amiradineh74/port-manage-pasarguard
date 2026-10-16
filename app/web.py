@@ -415,6 +415,39 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({'ok':True,'message':'تنظیمات نمایش ذخیره شدند.'})
             except (ValueError,KeyError,TypeError) as exc:
                 return self.send_json({'error':str(exc)},400)
+        if path=='/api/metadata/unassign':
+            # Remove ONLY the monitor's provider assignment and custom display
+            # settings. Raw traffic samples and PasarGuard remain untouched.
+            try:
+                obj=json.loads(self.read_body())
+                if type(obj) is not dict:raise ValueError('درخواست نامعتبر است')
+                nid=obj.get('node_id');port=obj.get('port')
+                provider=obj.get('provider')
+                if (type(nid) is not int or nid<=0 or
+                    type(port) is not int or not 1<=port<=65535 or
+                    type(provider) is not str or not provider.strip()):
+                    raise ValueError('شناسه نود، پورت یا ارائه‌دهنده نامعتبر است')
+                with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
+                    with db:
+                        db.execute('BEGIN IMMEDIATE')
+                        current=db.execute('''SELECT provider FROM metadata
+                            WHERE node_id=? AND port=?''',(nid,port)).fetchone()
+                        if current is None or current['provider']!=provider:
+                            raise ValueError('انتساب این پورت تغییر کرده است؛ گزارش را تازه‌سازی کنید.')
+                        linked=db.execute('''SELECT 1 FROM supplier_ports
+                            WHERE node_id=? AND port=? AND ended_at='' LIMIT 1''',
+                            (nid,port)).fetchone()
+                        if linked:
+                            raise ValueError('این پورت به حساب اعتباری متصل است. ابتدا آن را از حساب جدا کنید.')
+                        # Hide only the incorrect monitor entry; Xray port and
+                        # full monitoring samples/counter baselines are retained.
+                        db.execute('''UPDATE metadata
+                            SET title='',provider='',price_per_gb=0,enabled=0,
+                                notes='',billing_since=''
+                            WHERE node_id=? AND port=?''',(nid,port))
+                return self.send_json({'ok':True,'message':'انتساب حذف شد؛ آمار خام محفوظ است.'})
+            except (ValueError,TypeError,KeyError,OverflowError) as exc:
+                return self.send_json({'error':str(exc)},400)
         if path=='/api/metadata':
             try:
                 obj=json.loads(self.read_body())
