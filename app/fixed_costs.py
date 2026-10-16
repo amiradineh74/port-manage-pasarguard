@@ -1,9 +1,9 @@
-"""Recurring fixed-cost accounting in Solar Hijri months, estimated per 30 days.
+"""Recurring fixed-cost accounting in real Solar Hijri calendar months.
 
-Rates are user-entered IRR/month; each covered local calendar day carries 1/30
-of that amount, regardless of a Persian month's actual 29/30/31-day length.
-This is a daily management ESTIMATE, not a monthly invoice reconciliation.
-All SQLite date keys stay ISO Gregorian and UI dates remain Persian.
+Monthly costs are prorated by each Jalali month's ACTUAL length (29/30/31
+days). Cumulative rounding ensures that daily, weekly and full-month
+reports reconcile to the original monthly amount exactly, even for partial
+ranges. All database dates stay Gregorian ISO for existing data compatibility.
 """
 from datetime import date,timedelta
 from persian_calendar import from_date, month_start, following_month
@@ -60,10 +60,10 @@ def validate_expense(obj,node_ids):
       'end_date':end.isoformat() if end else '', 'note':note.strip()}
 
 def expense_breakdown(expense,lo,hi):
-    """Audit entries split at actual Solar Hijri month boundaries.
+    """Audit per-month shares: monthly IRR / actual Jalali days.
 
-    'month_days'=30 is the fixed accounting divisor. 'calendar_days' is
-    supplied separately so 29/31-day months are not misrepresented.
+    Each day's share is the change in the two-decimal rounded cumulative
+    amount, ensuring adjacent date windows sum exactly to the monthly bill.
     """
     start=date_value(expense['start_date'])
     until=date_value(expense['end_date'],False)
@@ -86,11 +86,19 @@ def expense_breakdown(expense,lo,hi):
         actual_days=(following_start-month_start(jy,jm)).days
         last=min(b,following_start-timedelta(days=1))
         covered=(last-current).days+1
+        first_day_index=(current-month_start(jy,jm)).days
+        last_day_index=first_day_index+covered
+        amount=expense['amount_rial']
+        # Calculate from month-start cumulative shares (not an independent
+        # rounded slice) so totals match across daily, weekly, monthly, and
+        # arbitrary report windows, including 29/31-day Solar Hijri months.
+        cost=round(round(amount*last_day_index/actual_days,2)
+                   -round(amount*first_day_index/actual_days,2),2)
         entries.append({
             'frequency':'monthly','month':f'{jy:04d}/{jm:02d}',
-            'covered_days':covered,'month_days':30,
+            'covered_days':covered,'month_days':actual_days,
             'calendar_days':actual_days,
-            'rial':round(expense['amount_rial']*covered/30,2)})
+            'rial':cost})
         current=following_start
     return entries
 

@@ -592,7 +592,7 @@ function renderExpenses(){
   const ratio=(e.breakdown||[]).map(x=>x.frequency==='once'
     ? 'یکباره در تاریخ پرداخت'
     : persianDigits(x.covered_days)+' روز از '+persianDigits(x.month_days)+
-      ' روزِ مبنای محاسبه · ماه شمسی '+persianDigits(x.month)).join(' + ')||'خارج از بازه گزارش';
+      ' روزِ ماه شمسی '+persianDigits(x.month)).join(' + ')||'خارج از بازه گزارش';
   return '<tr><td><strong>'+escapeHtml(e.label)+'</strong><span class="sub">'+escapeHtml(e.category)+
    (e.note?' · '+escapeHtml(e.note):'')+'</span></td><td>'+escapeHtml(expenseName(e))+'</td>'+
    '<td>'+(e.frequency==='monthly'?'ماهانه':'یکباره')+'</td>'+
