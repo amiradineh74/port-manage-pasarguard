@@ -17,5 +17,7 @@ jobs:
           bash -n bootstrap.sh install.sh update.sh uninstall.sh publish.sh reinstall-keep-usage.sh
           node --check app/dashboard.js
           node --check app/jalali.js
+          node --check app/finance.js
           node tests/test_jalali.js
           node tests/test_frontend.js
+          node tests/test_finance_frontend.js
