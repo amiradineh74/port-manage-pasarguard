@@ -43,6 +43,9 @@ for(const id of ['provider-wallet-dialog','provider-wallet-name','provider-walle
 const css=fs.readFileSync(path.join(__dirname,'../app/style.css'),'utf8');
 assert.ok(css.includes('position:fixed;inset:16px 16px 16px auto'));
 assert.ok(css.includes('.section-nav[data-open="true"]'));
+assert.ok(css.includes('v2.1 provider directory'));
+assert.ok(css.includes('.provider-account-fold[open]'));
+assert.ok(css.includes('.providers{\n display:flex;flex-direction:column'));
 
 const storage=new Map();
 const daily=[
@@ -92,6 +95,17 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  vm.runInContext("state.wallets=[{id:11,provider:'A',title:'A',kind:'money',bot_handle:'@sample',estimated_balance:2422750,opening_rial:2437750,opening_bytes:0,credited:0,spent_rial:15000,used_bytes:1250000000,reported_balance:null,started_at:'2026-10-14T00:00:00+00:00',ports:[],credit_history:[],check_history:[]}];renderProviderPanels()",ctx);
  assert.ok(elem('providers').innerHTML.includes('۲٬۴۲۲٬۷۵۰'));
  assert.ok(elem('providers').innerHTML.includes('provider-credit'));
+ assert.ok(elem('providers').innerHTML.includes('provider-overview'));
+ assert.ok(elem('providers').innerHTML.includes('provider-stats'));
+ assert.ok(elem('providers').innerHTML.includes('provider-balance-chip'));
+ assert.ok(elem('providers').innerHTML.includes('provider-account-summary'));
+ assert.ok(elem('providers').innerHTML.includes('۲ پورت'));
+ assert.ok(elem('providers').innerHTML.includes('۲٬۴۲۲٬۷۵۰ ریال'));
+ vm.runInContext("expandedProviderAccounts.add('A');renderProviderPanels()",ctx);
+ assert.ok(elem('providers').innerHTML.includes('class="provider-account-fold" data-provider="A" open'));
+ vm.runInContext("selectedProvider='A';renderProviderPanels()",ctx);
+ assert.ok(elem('providers').innerHTML.includes('class="provider-account-fold" data-provider="A" open'));
+ vm.runInContext("selectedProvider='__all__'",ctx);
  vm.runInContext("state.wallets[0].reconciliation_summary={count:3,positive:150000,negative:100000,net:50000};state.wallets[0].reconciliation_history=[{id:3,checked_at:'2026-10-17T12:00:00+00:00',estimated_before:2300000,reported_amount:2250000,adjustment:-50000,note:'third'}, {id:2,checked_at:'2026-10-16T12:00:00+00:00',estimated_before:2150000,reported_amount:2300000,adjustment:150000,note:'second'},{id:1,checked_at:'2026-10-14T12:00:00+00:00',estimated_before:2300000,reported_amount:2250000,adjustment:-50000,note:'first'}];renderProviderPanels()",ctx);
  assert.ok(elem('providers').innerHTML.includes('تاریخچه همسان‌سازی'));
  assert.ok(elem('providers').innerHTML.includes('اختلاف خالص'));
