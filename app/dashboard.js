@@ -128,27 +128,42 @@ function renderProviderPanels(){
   if(account.provider&&!names.has(account.provider))
    names.set(account.provider,{down:0,up:0,billed:0,cost:0,historical_cost:0});
  }
+ // Full-width compact rows avoid empty gaps when providers have unequal wallets.
  $('providers').innerHTML=[...names.entries()].map(([name,v])=>{
   const active=name===selectedProvider,title=name==='__all__'?allLabel:name;
-  return '<article class="provider-shell">'+
+  const count=state.ports.filter(p=>p.enabled&&
+     (selectedNode==='all'||p.node_id===Number(selectedNode))&&
+     (name==='__all__'||(p.provider||'بدون ارائه‌دهنده')===name)).length;
+  const fixed=(state.fixed_expenses||[]).filter(e=>
+    name==='__all__'
+      ? (selectedNode==='all'||(e.scope==='node'&&e.node_id===Number(selectedNode)))
+      : (selectedNode==='all'&&e.scope==='provider'&&e.provider===name)
+    ).reduce((sum,e)=>sum+Number(e.period_rial||0),0)/10;
+  const stats=[['دانلود',traffic(v.down)],['آپلود',traffic(v.up)],
+               ['مشمول هزینه',traffic(v.billed)],['هزینه ترافیک',money(v.cost)]];
+  return '<article class="provider-shell'+(active?' provider-shell-active':'')+'">'+
+    '<div class="provider-overview">'+
     '<button type="button" class="provider provider-button '+(active?'selected':'')+
-    '" data-provider="'+escapeHtml(name)+'" aria-pressed="'+active+'"><strong>'+
-    escapeHtml(title)+'</strong><small>دانلود '+traffic(v.down)+' · آپلود '+traffic(v.up)+
-    '</small><small>مصرف مشمول هزینه '+traffic(v.billed)+'</small>'+
-    '<small>ترافیک: '+money(v.cost)+'</small>'+
-    '<small>هزینه ثابت تخصیص‌یافته: '+money((state.fixed_expenses||[]).filter(e=>
-      name==='__all__'
-        ? (selectedNode==='all'||(e.scope==='node'&&e.node_id===Number(selectedNode)))
-        : (selectedNode==='all'&&e.scope==='provider'&&e.provider===name)
-      ).reduce((sum,e)=>sum+Number(e.period_rial||0),0)/10)+'</small></button>'+
-    '<button class="minor provider-report-button" data-provider="'+escapeHtml(name)+'" type="button">جزئیات و گزارش پورت‌ها</button>'+
-    providerWalletDetails(name)+'</article>';
+    '" data-provider="'+escapeHtml(name)+'" aria-pressed="'+active+'" aria-label="نمایش نمودار '+escapeHtml(title)+'">'+
+    '<span class="provider-heading"><strong>'+escapeHtml(title)+'</strong>'+
+    '<span class="provider-port-count">'+fmt(count)+' پورت</span></span>'+
+    '<span class="provider-stats">'+stats.map(([label,value])=>
+      '<span class="provider-stat"><small>'+label+'</small><b>'+value+'</b></span>').join('')+'</span>'+
+    '<span class="provider-fixed-note">هزینه ثابت تخصیص‌یافته: '+money(fixed)+'</span>'+
+    '</button>'+
+    '<div class="provider-tools"><button class="minor provider-report-button" data-provider="'+escapeHtml(name)+'" type="button">جزئیات و گزارش پورت‌ها</button></div>'+
+    '</div>'+providerWalletDetails(name)+'</article>';
  }).join('');
  document.querySelectorAll('.provider-button').forEach(b=>b.addEventListener('click',()=>{
   selectedProvider=b.dataset.provider;render();
  }));
  document.querySelectorAll('.provider-report-button').forEach(b=>
   b.addEventListener('click',()=>openProviderReport(b.dataset.provider)));
+ document.querySelectorAll('.provider-account-fold').forEach(details=>
+  details.addEventListener('toggle',()=>{
+   if(details.open)expandedProviderAccounts.add(details.dataset.provider);
+   else expandedProviderAccounts.delete(details.dataset.provider);
+  }));
  wireProviderWalletActions();
  const scale=$('chart-scale').value;
  const hourly=state.hourly_available && (scale==='hourly'||(scale==='auto'&&$('from').value===$('to').value));
@@ -386,6 +401,8 @@ function walletReconciliationHistory(a){
    '<tbody>'+ (checks||'<tr><td colspan="5">هنوز همسان‌سازی ثبت نشده است.</td></tr>')+
    '</tbody></table></div></details>';
 }
+// Preserve account disclosure state across refreshes and chart filtering.
+const expandedProviderAccounts=new Set();
 function providerWalletDetails(name){
  if(name==='__all__'||name==='بدون ارائه‌دهنده')return '';
  const accounts=walletsForProvider(name);
@@ -418,8 +435,18 @@ function providerWalletDetails(name){
      ' · اختلاف '+walletAmount(t.difference,a.kind)+' — '+escapeHtml(walletDate(t.checked_at))+'</p>').join('')+
    '</details>'+walletReconciliationHistory(a)+'</article>';
  }).join('');
- return '<div class="provider-credit">'+cards+
-   '<button type="button" class="minor provider-credit-create" data-provider="'+escapeHtml(name)+'">+ حساب اعتبار جدید</button></div>';
+ const preview=accounts.slice(0,2).map(a=>
+   '<span class="provider-balance-chip"><span>'+escapeHtml(a.title)+'</span><strong>'+
+   walletAmount(a.estimated_balance,a.kind)+'</strong></span>').join('');
+ const more=accounts.length>2?'<span class="provider-more-accounts">+'+fmt(accounts.length-2)+' حساب دیگر</span>':'';
+ return '<details class="provider-account-fold" data-provider="'+escapeHtml(name)+'"'+
+   (expandedProviderAccounts.has(name)?' open':'')+'>'+
+   '<summary class="provider-account-summary"><span class="provider-account-heading">'+
+   '<strong>حساب‌های اعتبار</strong><small>'+fmt(accounts.length)+' حساب</small></span>'+
+   '<span class="provider-balance-preview">'+(accounts.length?preview+more:'هنوز حسابی ثبت نشده')+'</span>'+
+   '<span class="provider-account-chevron" aria-hidden="true">⌄</span></summary>'+
+   '<div class="provider-credit">'+cards+
+   '<button type="button" class="minor provider-credit-create" data-provider="'+escapeHtml(name)+'">+ حساب اعتبار جدید</button></div></details>';
 }
 function wireProviderWalletActions(){
  document.querySelectorAll('.provider-credit-create').forEach(b=>
