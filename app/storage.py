@@ -74,6 +74,18 @@ CREATE TABLE IF NOT EXISTS fixed_expenses (
 );
 CREATE INDEX IF NOT EXISTS idx_fixed_expenses_dates ON fixed_expenses(start_date,end_date);
 
+-- Sales entries live ONLY in the monitoring application's private SQLite.
+-- A recorded zero differs from a missing row; one editable entry per local day.
+CREATE TABLE IF NOT EXISTS daily_sales (
+ day TEXT PRIMARY KEY,
+ amount_rial INTEGER NOT NULL CHECK(amount_rial BETWEEN 0 AND 100000000000000),
+ accounts_sold INTEGER NOT NULL CHECK(accounts_sold BETWEEN 0 AND 10000000),
+ note TEXT NOT NULL DEFAULT '',
+ created_at TEXT NOT NULL,
+ updated_at TEXT NOT NULL
+);
+
+
 CREATE TABLE IF NOT EXISTS supplier_accounts (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 128),
