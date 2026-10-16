@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'app'))
 from sales_reporting import save_daily_sale,financial_days,validate_day
+from persian_calendar import month_start
 from storage import connect,insert_poll
 from units import BYTES_PER_GIB
 
@@ -78,6 +79,32 @@ class FinanceTests(unittest.TestCase):
    self.assertEqual(out['days'][0]['status'],'recorded')
    self.assertEqual(out['days'][0]['profit_rial'],-31000)
    self.assertEqual(db.execute('SELECT COUNT(*) FROM samples').fetchone()[0],2)
+
+ def test_finance_report_reconciles_full_29_and_31_day_jalali_months(self):
+  # 1404/12 is 29 days; 1405/01 is 31 days. Both are before Oct 2026.
+  import datetime as dt
+  first=month_start(1404,12)
+  middle=month_start(1405,1)
+  last=month_start(1405,2)-dt.timedelta(days=1)
+  self.assertEqual((middle-first).days,29)
+  self.assertEqual((last-middle).days+1,31)
+  monthly=96500000
+  with tempfile.TemporaryDirectory() as d,connect(Path(d)/'db.sqlite3','GiB') as db:
+   db.execute("""INSERT INTO fixed_expenses
+    (label,category,scope,node_id,provider,frequency,amount_rial,start_date)
+    VALUES('Hosting','server','general',NULL,'','monthly',?,?)""",
+    (monthly,first.isoformat()))
+   db.commit()
+   save_daily_sale(db,{'day':middle.isoformat(),'amount_rial':4000000,'accounts_sold':2},'Asia/Tehran')
+   rows=financial_days(db,first.isoformat(),last.isoformat(),'Asia/Tehran','both',0)['days']
+   self.assertEqual(len(rows),60)
+   self.assertAlmostEqual(sum(row['fixed_rial'] for row in rows[:29]),monthly,places=2)
+   self.assertAlmostEqual(sum(row['fixed_rial'] for row in rows[29:]),monthly,places=2)
+   self.assertAlmostEqual(rows[0]['fixed_rial'],monthly/29,delta=0.011)
+   self.assertAlmostEqual(rows[29]['fixed_rial'],monthly/31,delta=0.011)
+   self.assertEqual(rows[29]['accounts_sold'],2)
+   self.assertAlmostEqual(rows[29]['profit_rial'],4000000-rows[29]['fixed_rial'],places=2)
+   self.assertEqual(db.execute('SELECT COUNT(*) FROM samples').fetchone()[0],0)
 
  def test_report_maximum_days(self):
   with tempfile.TemporaryDirectory() as d,connect(Path(d)/'db.sqlite3') as db:
