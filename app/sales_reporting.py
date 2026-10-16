@@ -2,7 +2,7 @@
 
 Sales are intentionally entered by the user, never inferred from PasarGuard.
 Traffic uses the existing dashboard's CURRENT per-port rates and direction;
-fixed costs use existing Gregorian-month prorating for local calendar days.
+fixed costs use recurring Solar Hijri months and a fixed 30-day planning rate.
 """
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -117,7 +117,7 @@ def financial_days(db,lo,hi,tz_name,default_direction,default_rate):
             'tracking_started_on':tracking_start.isoformat(),
             'yesterday_missing':yesterday_missing,'currency':'Rial',
             'cost_basis':'current_port_rates',
-            'fixed_cost_month':'gregorian'}
+            'fixed_cost_month':'jalali_30_day'}
 
 
 def expenses_report_day(expenses,day):
