@@ -1,5 +1,4 @@
 """Daily profit is independent of PasarGuard and aligned to local dates."""
-import calendar
 from datetime import datetime,timedelta,time,timezone
 from pathlib import Path
 import sys
@@ -42,7 +41,7 @@ class FinanceTests(unittest.TestCase):
   day=datetime.now(TZ).date()-timedelta(days=2)
   prior=day-timedelta(days=1)
   start=datetime(day.year,day.month,1).date()
-  amount=calendar.monthrange(day.year,day.month)[1]*31000
+  amount=30*31000  # solar-month recurrence uses fixed 30-day rate
   def at(d,hour):
    return datetime.combine(d,time(hour,0),tzinfo=TZ).astimezone(timezone.utc).isoformat(timespec='seconds')
   cfg={'default_price_per_gb':250,'default_bill_direction':'both',
