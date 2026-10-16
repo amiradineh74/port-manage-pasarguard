@@ -74,6 +74,7 @@ def expense_breakdown(expense,lo,hi):
     b=min(upper,until) if until else upper
     if a>b:return []
     if expense['frequency']=='once':
+        if not lower<=start<=upper:return []
         return [{'frequency':'once','date':start.isoformat(),
                  'rial':expense['amount_rial']}]
     entries=[]
