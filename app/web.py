@@ -248,6 +248,7 @@ class Handler(BaseHTTPRequestHandler):
         if not token:return self.redirect('/login') if path in ('/','/index.html') else self.send_json({'error':'ورود لازم است'},401)
         if path in ('/','/index.html'):return self.send_bytes(html_response('dashboard.html'))
         if path=='/dashboard.js':return self.send_bytes(html_response('dashboard.js'),ctype='application/javascript; charset=utf-8')
+        if path=='/finance.js':return self.send_bytes(html_response('finance.js'),ctype='application/javascript; charset=utf-8')
         if path=='/jalali.js':return self.send_bytes(html_response('jalali.js'),ctype='application/javascript; charset=utf-8')
         if path=='/style.css':return self.send_bytes(html_response('style.css'),ctype='text/css; charset=utf-8')
         if path=='/api/wallets':
@@ -271,6 +272,7 @@ class Handler(BaseHTTPRequestHandler):
                     result=financial_days(db,lo,hi,prefs['timezone'],
                         CFG.get('default_bill_direction','downlink'),
                         CFG.get('default_price_per_gb',0))
+                    result['display_currency']=prefs['currency']
                     return self.send_json(result)
             except (ValueError,KeyError) as exc:
                 return self.send_json({'error':str(exc)},400)
