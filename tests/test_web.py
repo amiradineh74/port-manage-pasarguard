@@ -176,6 +176,78 @@ class WebTests(unittest.TestCase):
             after=tuple(db.execute('SELECT COUNT(*),COALESCE(SUM(delta_down),0) FROM samples').fetchone())
         self.assertEqual(before,after)
 
+    def test_unassign_wrong_provider_port_preserves_raw_samples(self):
+        """A mistaken provider entry must be removable without deleting Xray usage."""
+        from supplier_wallets import assign_provider_wallet
+        cookie=self.login()
+        status,_,payload=self.request('GET','/api/dashboard?from=2026-10-13&to=2026-10-13',
+                                      headers={'Cookie':cookie})
+        self.assertEqual(status,200)
+        csrf=json.loads(payload)['csrf']
+        headers={'Cookie':cookie,'Content-Type':'application/json','X-CSRF-Token':csrf}
+        path=Path(self.tmp.name)/'traffic.sqlite3'
+        with connect(path) as db:
+            fixture={'nodes':[{'node_id':88,'node_name':'ExtraNode',
+                'address':'192.0.2.88','ports':[{'port':50888,'tag':'extra',
+                'uplink':0,'downlink':GiB}]}],'errors':[]}
+            insert_poll(db,fixture,'2026-10-13T00:00:00+00:00',web.CFG)
+            db.execute('''INSERT INTO metadata(node_id,port,title,provider,price_per_gb,enabled)
+                VALUES(88,50888,'Mistaken','techvps',420,1)''')
+            db.commit()
+            raw_before=tuple(db.execute('''SELECT COUNT(*),SUM(delta_down),SUM(cost)
+                FROM samples WHERE node_id=88 AND port=50888''').fetchone())
+        body=json.dumps({'node_id':88,'port':50888,'provider':'techvps'})
+        try:
+            status,_,_=self.request('POST','/api/metadata/unassign',body)
+            self.assertEqual(status,401)
+            status,_,_=self.request('POST','/api/metadata/unassign',body,
+                {'Cookie':cookie,'X-CSRF-Token':'invalid'})
+            self.assertEqual(status,403)
+            status,_,_=self.request('POST','/api/metadata/unassign',
+                json.dumps({'node_id':88,'port':50888,'provider':'Wrong'}),headers)
+            self.assertEqual(status,400)
+            with connect(path) as db:
+                wallet_id=assign_provider_wallet(db,{'provider':'techvps',
+                    'kind':'money','opening_amount':100000,
+                    'ports':[{'node_id':88,'port':50888}]})
+                db.commit()
+            status,_,error=self.request('POST','/api/metadata/unassign',body,headers)
+            self.assertEqual(status,400)
+            self.assertIn('حساب اعتباری',json.loads(error)['error'])
+            with connect(path) as db:
+                # Detach only the temporary test wallet first.
+                with db:
+                    db.execute('''UPDATE supplier_ports SET ended_at='2026-10-14T00:00:00+00:00'
+                        WHERE account_id=?''',(wallet_id,))
+            status,_,result=self.request('POST','/api/metadata/unassign',body,headers)
+            self.assertEqual(status,200,result)
+            with connect(path) as db:
+                meta=db.execute('''SELECT title,provider,price_per_gb,enabled
+                    FROM metadata WHERE node_id=88 AND port=50888''').fetchone()
+                self.assertEqual(tuple(meta),('', '',0.0,0))
+                raw_after=tuple(db.execute('''SELECT COUNT(*),SUM(delta_down),SUM(cost)
+                    FROM samples WHERE node_id=88 AND port=50888''').fetchone())
+                self.assertEqual(raw_before,raw_after)
+                self.assertEqual(db.execute('''SELECT COUNT(*) FROM port_state
+                    WHERE node_id=88 AND port=50888''').fetchone()[0],1)
+                self.assertEqual(db.execute('''SELECT COUNT(*) FROM supplier_ports
+                    WHERE account_id=?''',(wallet_id,)).fetchone()[0],1)
+            status,_,_=self.request('POST','/api/metadata/unassign',body,headers)
+            self.assertEqual(status,400)
+        finally:
+            with connect(path) as db:
+                with db:
+                    db.execute('''DELETE FROM supplier_port_terms WHERE binding_id IN
+                        (SELECT id FROM supplier_ports WHERE node_id=88)''')
+                    db.execute('''DELETE FROM provider_wallet_links WHERE account_id IN
+                        (SELECT account_id FROM supplier_ports WHERE node_id=88)''')
+                    db.execute('''DELETE FROM supplier_accounts WHERE id IN
+                        (SELECT account_id FROM supplier_ports WHERE node_id=88)''')
+                    db.execute('DELETE FROM supplier_ports WHERE node_id=88')
+                    db.execute('DELETE FROM metadata WHERE node_id=88')
+                    db.execute('DELETE FROM samples WHERE node_id=88')
+                    db.execute('DELETE FROM port_state WHERE node_id=88')
+
     def test_unauthenticated_block(self):
         st,_,_=self.request('GET','/api/dashboard')
         self.assertEqual(st,401)
