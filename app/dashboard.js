@@ -187,8 +187,21 @@ function renderPortReport(){
  const totals=summarize(ports);
  $('provider-report-title').textContent='گزارش پورت‌ها — '+(reportProvider==='__all__'?'همه ارائه‌دهنده‌ها':reportProvider);
  $('provider-report-summary').textContent=ports.length+' پورت | دانلود '+traffic(totals.down)+' | آپلود '+traffic(totals.up)+' | هزینه '+money(totals.cost);
- $('ports').innerHTML=ports.map(p=>`<tr class="${p.enabled?'':'muted'}"><td><strong>${escapeHtml(p.node_name)}</strong><span class="sub">پورت ${p.port} · نود ${p.node_id}</span></td><td>${escapeHtml(p.title||'بدون نام دلخواه')}<span class="sub">${escapeHtml(p.provider||'تعرفه تعیین نشده')} · <span class="tag">${escapeHtml(p.tag)}</span></span></td><td>${traffic(p.down)}</td><td>${traffic(p.up)}</td><td class="money">${money(p.cost)}<span class="sub">قبلی: ${money(p.historical_cost)}</span></td><td>${age(p.last_seen)}</td><td><button class="editbtn" data-nid="${p.node_id}" data-port="${p.port}">ویرایش</button></td></tr>`).join('')||'<tr><td colspan="7">پورتی پیدا نشد.</td></tr>';
+ $('ports').innerHTML=ports.map(p=>`<tr class="${p.enabled?'':'muted'}"><td><strong>${escapeHtml(p.node_name)}</strong><span class="sub">پورت ${p.port} · نود ${p.node_id}</span></td><td>${escapeHtml(p.title||'بدون نام دلخواه')}<span class="sub">${escapeHtml(p.provider||'تعرفه تعیین نشده')} · <span class="tag">${escapeHtml(p.tag)}</span></span></td><td>${traffic(p.down)}</td><td>${traffic(p.up)}</td><td class="money">${money(p.cost)}<span class="sub">قبلی: ${money(p.historical_cost)}</span></td><td>${age(p.last_seen)}</td><td><button class="editbtn" data-nid="${p.node_id}" data-port="${p.port}">ویرایش</button>${p.provider?' <button class="minor unassign-port" type="button" data-nid="'+p.node_id+'" data-port="'+p.port+'">حذف از ارائه‌دهنده</button>':''}</td></tr>`).join('')||'<tr><td colspan="7">پورتی پیدا نشد.</td></tr>';
  document.querySelectorAll('.editbtn').forEach(btn=>btn.addEventListener('click',()=>{ $('provider-report-dialog').close();openEdit(Number(btn.dataset.nid),Number(btn.dataset.port)); }));
+ document.querySelectorAll('.unassign-port').forEach(btn=>btn.addEventListener('click',async()=>{
+  const nodeId=Number(btn.dataset.nid),port=Number(btn.dataset.port);
+  const entry=state.ports.find(p=>p.node_id===nodeId&&p.port===port);
+  if(!entry?.provider)return;
+  if(!confirm('پورت '+port+' از نود '+entry.node_name+' از ارائه‌دهنده «'+entry.provider+
+     '» حذف و از گزارش پنهان شود؟\\nآمار خام حفظ می‌شود و PasarGuard تغییری نمی‌کند.'))return;
+  btn.disabled=true;
+  try{
+   await sendUpdate('/api/metadata/unassign',{node_id:nodeId,port,provider:entry.provider});
+   await reload();
+  }catch(err){alert(err.message);btn.disabled=false;}
+ }));
+
 }
 
 function checkedPorts(form){
