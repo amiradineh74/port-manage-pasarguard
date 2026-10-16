@@ -383,6 +383,8 @@ class WebTests(unittest.TestCase):
         self.assertTrue(csvdata.startswith(b'\xef\xbb\xbf'))
         self.assertIn('DE server',csvdata.decode('utf-8-sig'))
         self.assertIn(',10333,monthly cost',csvdata.decode('utf-8-sig'))
+        self.assertIn('تاریخ شروع شمسی',csvdata.decode('utf-8-sig'))
+        self.assertIn('1405/07/09',csvdata.decode('utf-8-sig'))
         item.update({'id':expense_id,'amount_rial':620000})
         st,_,_=self.request('POST','/api/fixed-expense',json.dumps(item),auth)
         self.assertEqual(st,200)
