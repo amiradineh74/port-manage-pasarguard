@@ -355,7 +355,7 @@ class WebTests(unittest.TestCase):
         csrf=json.loads(payload)['csrf']
         auth={'Cookie':cookie,'Content-Type':'application/json','X-CSRF-Token':csrf}
         item={'label':'DE server','category':'server','scope':'node','node_id':5,
-              'provider':'','frequency':'monthly','amount_rial':310000,
+              'provider':'','frequency':'monthly','amount_rial':310333.33,
               'start_date':'2026-10-01','end_date':'','note':'monthly cost'}
         with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
             snapshot=tuple(db.execute('SELECT COUNT(*),SUM(delta_down) FROM samples').fetchone())
@@ -372,7 +372,7 @@ class WebTests(unittest.TestCase):
                               headers={'Cookie':cookie})
         data=json.loads(raw)
         self.assertEqual(st,200)
-        self.assertEqual(data['fixed_expenses_total_rial'],10000)
+        self.assertEqual(data['fixed_expenses_total_rial'],10333.33)
         self.assertEqual(data['fixed_expenses'][0]['id'],expense_id)
         self.assertEqual(data['fixed_expenses'][0]['scope'],'node')
         st,headers,csvdata=self.request('GET',
@@ -382,13 +382,13 @@ class WebTests(unittest.TestCase):
         self.assertIn('text/csv',headers['Content-Type'])
         self.assertTrue(csvdata.startswith(b'\xef\xbb\xbf'))
         self.assertIn('DE server',csvdata.decode('utf-8-sig'))
-        self.assertIn('10000',csvdata.decode('utf-8-sig'))
-        item.update({'id':expense_id,'amount_rial':620000})
+        self.assertIn('10333.33',csvdata.decode('utf-8-sig'))
+        item.update({'id':expense_id,'amount_rial':620666.67})
         st,_,_=self.request('POST','/api/fixed-expense',json.dumps(item),auth)
         self.assertEqual(st,200)
         st,_,raw=self.request('GET','/api/dashboard?from=2026-10-13&to=2026-10-13',
                               headers={'Cookie':cookie})
-        self.assertEqual(json.loads(raw)['fixed_expenses_total_rial'],20000)
+        self.assertEqual(json.loads(raw)['fixed_expenses_total_rial'],20666.67)
         st,_,_=self.request('POST','/api/fixed-expense/delete',
             json.dumps({'id':expense_id}),auth)
         self.assertEqual(st,200)
