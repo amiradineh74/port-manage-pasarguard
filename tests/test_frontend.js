@@ -11,7 +11,7 @@ function elem(id){
    attributes:{},setAttribute(k,v){this.attributes[k]=String(v);},
    removeAttribute(k){delete this.attributes[k];},
    getAttribute(k){return this.attributes[k]||null;},
-   addEventListener(){},querySelectorAll(){return[];},showModal(){},close(){},selectedIndex:0});
+   addEventListener(){},querySelector(){return {disabled:false};},querySelectorAll(){return[];},showModal(){},close(){},selectedIndex:0});
  }
  return elements.get(id);
 }
