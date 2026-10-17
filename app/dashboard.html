@@ -135,6 +135,23 @@
 <p class="sub">هزینه ماهانه برای ماه‌های میلادی بر اساس تعداد روزهای داخل بازه تقسیم می‌شود. این هزینه از مانیتورینگ مستقل است؛ هیچ تغییری در سرور یا پنل اصلی ایجاد نمی‌کند.</p>
 <div class="buttons"><button type="button" class="minor" id="expense-cancel">انصراف</button><button type="submit" class="primary">ذخیره هزینه</button></div>
 </form></dialog>
+<dialog id="provider-rename-dialog"><form id="provider-rename-form" method="dialog">
+<h2>اصلاح نام ارائه‌دهنده</h2>
+<input id="provider-rename-old" type="hidden">
+<p>نام فعلی: <strong id="provider-rename-old-display"></strong></p>
+<label>نام صحیح ارائه‌دهنده<input id="provider-rename-new" maxlength="128" required autocomplete="off"></label>
+<p class="sub">فقط عنوان ارائه‌دهنده برای همه پورت‌ها، حساب‌های اعتباری و هزینه‌های ثابت مربوطه اصلاح می‌شود. مبلغ‌ها، ترافیک، شارژ و تاریخچه همسان‌سازی هیچ تغییری نمی‌کنند. ادغام دو ارائه‌دهنده با یک نام مجاز نیست.</p>
+<div class="buttons"><button type="button" class="minor" id="provider-rename-cancel">انصراف</button><button type="submit" class="primary">ذخیره نام صحیح</button></div>
+</form></dialog>
+<dialog id="wallet-identity-dialog"><form id="wallet-identity-form" method="dialog">
+<h2>ویرایش مشخصات حساب</h2>
+<input id="wallet-identity-id" type="hidden">
+<label>نام حساب اعتبار<input id="wallet-identity-title" maxlength="128" required autocomplete="off"></label>
+<label>نام / شناسه ربات<input id="wallet-identity-handle" maxlength="128" autocomplete="off" placeholder="@supplierbot"></label>
+<label>توضیحات حساب<input id="wallet-identity-notes" maxlength="1000" autocomplete="off"></label>
+<p class="sub">این فرم فقط نام حساب، شناسه ربات و توضیحات را ویرایش می‌کند؛ به مانده اولیه، واحد پول، نرخ‌ها، پورت‌ها و تاریخچه مالی دست نمی‌زند.</p>
+<div class="buttons"><button type="button" class="minor" id="wallet-identity-cancel">انصراف</button><button type="submit" class="primary">ذخیره مشخصات</button></div>
+</form></dialog>
 <dialog id="provider-wallet-dialog"><form id="provider-wallet-form" method="dialog">
 <h2 id="provider-wallet-heading">تعریف حساب اعتبار ارائه‌دهنده</h2>
 <input id="provider-wallet-name" type="hidden">
