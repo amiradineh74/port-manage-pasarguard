@@ -168,14 +168,17 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  assert.equal(elem('nav-backdrop').hidden,true);
  // One task-focused workspace is visible at a time; no counters or wallets reset.
  assert.equal(elem('workspace-overview').hidden,false);
+ assert.equal(elem('overview').hidden,false);
  for(const page of ['finance','providers-section','manage','expenses','settings-section'])
   assert.equal(elem(page).hidden,true);
  vm.runInContext("activateWorkspace('#providers-section')",ctx);
  assert.equal(elem('providers-section').hidden,false);
+ assert.equal(elem('overview').hidden,false);
  assert.equal(elem('workspace-overview').hidden,true);
  assert.equal(elem('finance').hidden,true);
  vm.runInContext("activateWorkspace('#finance')",ctx);
  assert.equal(elem('finance').hidden,false);
+ assert.equal(elem('overview').hidden,true);
  assert.equal(elem('providers-section').hidden,true);
  vm.runInContext("activateWorkspace('#settings-section')",ctx);
  assert.equal(elem('settings-section').hidden,false);
