@@ -584,6 +584,7 @@ function openProviderWallet(provider,accountId=null){
  $('provider-wallet-display').textContent=provider;
  $('provider-wallet-edit-id').value=account?String(account.id):'';
  $('provider-wallet-mode').value=account?'edit':'new';
+ $('wallet-advanced-operation').open=Boolean(account);
  $('provider-wallet-mode').querySelector('option[value="edit"]').disabled=!account;
  $('provider-wallet-heading').textContent=account?'ویرایش پورت‌های '+account.title:'افزودن اعتبار جدید';
  $('provider-wallet-kind').value='money';
