@@ -135,7 +135,7 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  assert.ok(elem('providers').innerHTML.includes('گزارش پورت‌ها'));
  assert.ok(elem('providers').innerHTML.includes('provider-quick-create'));
  assert.ok(elem('reconciliation-overview').innerHTML.includes('آخرین مغایرت‌های ثبت‌شده'));
- assert.ok(elem('reconciliation-overview').innerHTML.includes('third'));
+ assert.ok(elem('reconciliation-overview').innerHTML.includes('مشاهده حساب'));
 
  vm.runInContext("openProviderReport('A')",ctx);
  assert.ok(elem('provider-report-title').textContent.includes('A'));
