@@ -655,6 +655,7 @@ body dialog h2{padding-bottom:8px;border-bottom:1px solid var(--line)}
 
 /* v2.2 task-focused workspaces — progressive disclosure first, no new dependencies. */
 .workspace-view[hidden]{display:none!important}
+#overview[hidden],#status[hidden]{display:none!important}
 .workspace-view{animation:workspace-enter .16s ease-out}
 @keyframes workspace-enter{from{opacity:.82;transform:translateY(5px)}to{opacity:1;transform:none}}
 .workspace-hero{
