@@ -123,7 +123,8 @@ function renderReconciliationOverview(){
  $('reconciliation-overview').innerHTML=
   '<div class="reconciliation-header"><div><h3>آخرین مغایرت‌های ثبت‌شده</h3>'+
   '<p>این اعداد مربوط به <b>لحظه همسان‌سازی</b> هستند، نه اختلاف لحظه‌ای با ربات. محاسبه مانده به‌تنهایی تأییدکننده شمارش ترافیک تأمین‌کننده نیست.</p></div>'+
-  '<span class="audit-summary">'+fmt(reconciled.length)+' حساب دارای سابقه · '+fmt(total)+' حساب</span></div>'+
+  '<div class="audit-actions"><span class="audit-summary">'+fmt(reconciled.length)+' حساب دارای سابقه · '+fmt(total)+' حساب</span>'+
+  '<a class="minor linkbutton" href="/api/wallet-reconciliations.csv">خروجی CSV همسان‌سازی‌ها</a></div></div>'+
   (rows?'<div class="table-scroll"><table class="audit-table"><thead><tr><th>تأمین‌کننده / حساب</th><th>مانده قبل</th>'+
    '<th>مانده اعلام‌شده</th><th>اختلاف ثبت‌شده</th><th>زمان</th><th>عملیات</th></tr></thead><tbody>'+rows+'</tbody></table></div>':
    '<p class="audit-empty">هنوز همسان‌سازی ثبت نشده است. برای مقایسه از بخش حساب هر تأمین‌کننده استفاده کن.</p>');
