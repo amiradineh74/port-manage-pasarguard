@@ -102,6 +102,44 @@ function stackedBars(id,groups,field){
  if(id==='chart')$('node-legend').innerHTML=selectedIds.map(nid=>
   '<span class="legend-node"><i style="background:'+colors.get(nid)+'"></i>'+escapeHtml(allNodes.get(nid)||('Node '+nid))+'</span>').join('');
 }
+function renderReconciliationOverview(){
+ const accounts=wallets().filter(a=>a.provider);
+ const reconciled=accounts.map(a=>({
+  account:a,
+  latest:(a.reconciliation_history||[]).find(h=>!h.voided_at)||null
+ })).filter(x=>x.latest);
+ const total=accounts.length;
+ const rows=reconciled.map(({account:a,latest:h})=>{
+  const value=Number(h.adjustment)||0;
+  const direction=value<0?'مانده تأمین‌کننده کمتر':value>0?'مانده تأمین‌کننده بیشتر':'بدون اختلاف';
+  return '<tr><td><strong>'+escapeHtml(a.provider)+'</strong><small class="audit-account">'+escapeHtml(a.title)+'</small></td>'+
+   '<td>'+walletAmount(h.estimated_before,a.kind)+'</td>'+
+   '<td>'+walletAmount(h.reported_amount,a.kind)+'</td>'+
+   '<td class="'+(value===0?'audit-neutral':'audit-variance')+'">'+(value>0?'+':'')+walletAmount(value,a.kind)+
+   '<small class="audit-account">'+direction+'</small></td>'+
+   '<td>'+escapeHtml(walletDate(h.checked_at))+'</td>'+
+   '<td><button type="button" class="minor audit-open-account" data-account="'+a.id+'">مشاهده حساب</button></td></tr>';
+ }).join('');
+ $('reconciliation-overview').innerHTML=
+  '<div class="reconciliation-header"><div><h3>آخرین مغایرت‌های ثبت‌شده</h3>'+
+  '<p>این اعداد مربوط به <b>لحظه همسان‌سازی</b> هستند، نه اختلاف لحظه‌ای با ربات. محاسبه مانده به‌تنهایی تأییدکننده شمارش ترافیک تأمین‌کننده نیست.</p></div>'+
+  '<span class="audit-summary">'+fmt(reconciled.length)+' حساب دارای سابقه · '+fmt(total)+' حساب</span></div>'+
+  (rows?'<div class="table-scroll"><table class="audit-table"><thead><tr><th>تأمین‌کننده / حساب</th><th>مانده قبل</th>'+
+   '<th>مانده اعلام‌شده</th><th>اختلاف ثبت‌شده</th><th>زمان</th><th>عملیات</th></tr></thead><tbody>'+rows+'</tbody></table></div>':
+   '<p class="audit-empty">هنوز همسان‌سازی ثبت نشده است. برای مقایسه از بخش حساب هر تأمین‌کننده استفاده کن.</p>');
+ $('reconciliation-overview').querySelectorAll('.audit-open-account').forEach(button=>
+  button.addEventListener('click',()=>{
+   const account=walletById(button.dataset.account);
+   if(!account)return;
+   selectedNode='all';$('node-filter').value='all';
+   selectedProvider=account.provider;
+   expandedProviderAccounts.add(account.provider);
+   renderProviderPanels();
+   const fold=[...document.querySelectorAll('.provider-account-fold')]
+    .find(x=>x.dataset.provider===account.provider);
+   if(fold){fold.open=true;fold.scrollIntoView({block:'start',behavior:'smooth'});}
+  }));
+}
 function renderProviderPanels(){
  if(!state)return;
  const paths=visiblePaths(),current=summarize(paths);
@@ -151,7 +189,8 @@ function renderProviderPanels(){
       '<span class="provider-stat"><small>'+label+'</small><b>'+value+'</b></span>').join('')+'</span>'+
     '<span class="provider-fixed-note">هزینه ثابت تخصیص‌یافته: '+money(fixed)+'</span>'+
     '</button>'+
-    '<div class="provider-tools"><button class="minor provider-report-button" data-provider="'+escapeHtml(name)+'" type="button">جزئیات و گزارش پورت‌ها</button>'+
+    '<div class="provider-tools"><button class="minor provider-report-button" data-provider="'+escapeHtml(name)+'" type="button">گزارش پورت‌ها</button>'+
+   (name==='__all__'||name==='بدون ارائه‌دهنده'?'':'<button class="minor provider-quick-create" data-provider="'+escapeHtml(name)+'" type="button">+ حساب جدید</button>')+
    (name==='__all__'||name==='بدون ارائه‌دهنده'?'':'<button class="minor provider-rename-button" data-provider="'+escapeHtml(name)+'" type="button">اصلاح نام ارائه‌دهنده</button>')+'</div>'+
     '</div>'+providerWalletDetails(name)+'</article>';
  }).join('');
@@ -162,12 +201,15 @@ function renderProviderPanels(){
   b.addEventListener('click',()=>openProviderReport(b.dataset.provider)));
  document.querySelectorAll('.provider-rename-button').forEach(b=>
   b.addEventListener('click',()=>openProviderRename(b.dataset.provider)));
+ document.querySelectorAll('.provider-quick-create').forEach(b=>
+  b.addEventListener('click',()=>openProviderWallet(b.dataset.provider)));
  document.querySelectorAll('.provider-account-fold').forEach(details=>
   details.addEventListener('toggle',()=>{
    if(details.open)expandedProviderAccounts.add(details.dataset.provider);
    else expandedProviderAccounts.delete(details.dataset.provider);
   }));
  wireProviderWalletActions();
+ renderReconciliationOverview();
  const scale=$('chart-scale').value;
  const hourly=state.hourly_available && (scale==='hourly'||(scale==='auto'&&$('from').value===$('to').value));
  const grouping=scale==='monthly'?'monthly':(hourly?'hourly':'daily');
@@ -814,22 +856,39 @@ function setNavigationOpen(open){
 }
 function highlightSection(href){
  document.querySelectorAll('.section-nav a').forEach(link=>{
-  if(link.getAttribute('href')===href)link.setAttribute('aria-current','location');
+  if(link.getAttribute('href')===href)link.setAttribute('aria-current','page');
   else link.removeAttribute('aria-current');
  });
 }
+const workspaceTargets={
+ '#overview':'workspace-overview',
+ '#finance':'finance',
+ '#providers-section':'providers-section',
+ '#manage':'manage',
+ '#expenses':'expenses',
+ '#settings-section':'settings-section'
+};
+function activateWorkspace(href){
+ const target=Object.prototype.hasOwnProperty.call(workspaceTargets,href)?href:'#overview';
+ for(const [key,id] of Object.entries(workspaceTargets))
+  $(id).hidden=(target!==key);
+ highlightSection(target);
+ setNavigationOpen(false);
+}
 $('nav-toggle').addEventListener('click',()=>setNavigationOpen($('main-nav').dataset.open!=='true'));
 $('nav-backdrop').addEventListener('click',()=>setNavigationOpen(false));
-document.querySelectorAll('.section-nav a').forEach(link=>{
+document.querySelectorAll('.section-nav a, [data-open-workspace]').forEach(link=>{
  link.addEventListener('click',()=>{
-  highlightSection(link.getAttribute('href'));
-  setNavigationOpen(false);
+  activateWorkspace(link.getAttribute('href'));
+  if(typeof window!=='undefined'&&typeof window.scrollTo==='function')window.scrollTo({top:0,behavior:'instant'});
  });
 });
+if(typeof window!=='undefined'&&typeof window.addEventListener==='function')
+ window.addEventListener('hashchange',()=>activateWorkspace(location.hash));
 document.addEventListener('keydown',e=>{
  if(e.key==='Escape'&&$('main-nav').dataset.open==='true')setNavigationOpen(false);
 });
 setNavigationOpen(false);
-highlightSection(location.hash||'#overview');
+activateWorkspace(location.hash||'#overview');
 
 reload();
