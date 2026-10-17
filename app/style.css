@@ -761,3 +761,9 @@ body dialog h2{padding-bottom:8px;border-bottom:1px solid var(--line)}
  .workspace-view{animation:none}
  .finance-report-details>summary:after,.analysis-disclosure>summary:after{transition:none}
 }
+
+.wallet-create-hint{margin:0;font-size:12px;line-height:1.85;color:var(--muted)}
+.wallet-advanced-operation{margin:0 0 5px}
+.wallet-advanced-operation>summary{min-height:41px;padding:8px 12px;font-size:12px}
+.wallet-advanced-operation>label{padding:10px 12px 13px;display:flex;flex-direction:column;gap:7px}
+.wallet-advanced-operation select{width:100%}
