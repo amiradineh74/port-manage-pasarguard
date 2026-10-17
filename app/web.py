@@ -571,7 +571,7 @@ class Handler(BaseHTTPRequestHandler):
                 w.writerow([safe_cell(provider),safe_cell(title),kind,rid,checked,before,reported,
                             adjustment,label,shown,safe_cell(note),
                             'لغوشده' if voided else 'فعال',voided or '',safe_cell(reason)])
-        return self.send_bytes(('\\ufeff'+out.getvalue()).encode('utf-8'),
+        return self.send_bytes((chr(0xfeff)+out.getvalue()).encode('utf-8'),
             ctype='text/csv; charset=utf-8',
             extra={'Content-Disposition':'attachment; filename="pgtraffic-wallet-reconciliations.csv"'})
 
