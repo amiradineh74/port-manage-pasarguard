@@ -176,6 +176,48 @@ class WebTests(unittest.TestCase):
             after=tuple(db.execute('SELECT COUNT(*),COALESCE(SUM(delta_down),0) FROM samples').fetchone())
         self.assertEqual(before,after)
 
+    def test_reconciliation_csv_requires_login_and_preserves_cancelled_audit(self):
+        import csv
+        from io import StringIO
+        from supplier_wallets import create_account
+        self.assertEqual(self.request('GET','/api/wallet-reconciliations.csv')[0],401)
+        cookie=self.login()
+        with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+            with db:
+                aid=create_account(db,{'kind':'money','title':'CSV export test',
+                    'bot_handle':'@bot','opening_amount':100000})
+                db.execute("INSERT INTO provider_wallet_links(provider,account_id) VALUES(?,?)",
+                           ('Example Provider',aid))
+                db.execute("""INSERT INTO supplier_reconciliations
+                    (account_id,checked_at,reported_amount,estimated_before,adjustment,note)
+                    VALUES(?,?,?,?,?,?)""",(aid,'2026-10-17T01:00:00+00:00',
+                                           95000,100000,-5000,'provider balance'))
+                rid=db.execute('SELECT last_insert_rowid()').fetchone()[0]
+                db.execute("""INSERT INTO supplier_reconciliation_voids
+                    (reconciliation_id,account_id,voided_at,reason)
+                    VALUES(?,?,?,?)""",(rid,aid,'2026-10-17T02:00:00+00:00','wrong checkpoint'))
+        try:
+            status,headers,body=self.request('GET','/api/wallet-reconciliations.csv',
+                                              headers={'Cookie':cookie})
+            self.assertEqual(status,200)
+            self.assertIn('text/csv',headers['Content-Type'])
+            self.assertIn('attachment;',headers['Content-Disposition'])
+            self.assertTrue(body.startswith(b'\\xef\\xbb\\xbf'))
+            rows=list(csv.reader(StringIO(body.decode('utf-8-sig'))))
+            matches=[row for row in rows[1:] if row[3]==str(rid)]
+            self.assertEqual(len(matches),1)
+            self.assertEqual(matches[0][0],'Example Provider')
+            self.assertEqual(matches[0][2],'money')
+            self.assertEqual(matches[0][7],'-5000')
+            self.assertEqual(matches[0][11],'لغوشده')
+        finally:
+            with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+                with db:
+                    db.execute('DELETE FROM supplier_reconciliation_voids WHERE account_id=?',(aid,))
+                    db.execute('DELETE FROM supplier_reconciliations WHERE account_id=?',(aid,))
+                    db.execute('DELETE FROM provider_wallet_links WHERE account_id=?',(aid,))
+                    db.execute('DELETE FROM supplier_accounts WHERE id=?',(aid,))
+
     def test_provider_rename_and_account_label_edit_are_csrf_protected(self):
         from supplier_wallets import create_account
         cookie=self.login()
