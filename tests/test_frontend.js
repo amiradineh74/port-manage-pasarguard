@@ -32,6 +32,8 @@ assert.ok(dashboardTemplate.includes('id="main-nav"'));
 assert.ok(dashboardTemplate.includes('id="nav-toggle"'));
 assert.ok(dashboardTemplate.includes('id="nav-backdrop"'));
 assert.ok(dashboardTemplate.includes('id="provider-report-dialog"'));
+assert.ok(dashboardTemplate.includes('id="provider-rename-form"'));
+assert.ok(dashboardTemplate.includes('id="wallet-identity-form"'));
 assert.ok(dashboardTemplate.includes('<th>قیمت واحد (فعلی)</th>'));
 assert.ok(dashboardTemplate.includes('<tbody id="ports"><tr><td colspan="8">'));
 assert.ok(dashboardTemplate.includes('id="rate-volume-unit"'));
@@ -95,6 +97,8 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  vm.runInContext("state.wallets=[{id:11,provider:'A',title:'A',kind:'money',bot_handle:'@sample',estimated_balance:2422750,opening_rial:2437750,opening_bytes:0,credited:0,spent_rial:15000,used_bytes:1250000000,reported_balance:null,started_at:'2026-10-14T00:00:00+00:00',ports:[],credit_history:[],check_history:[]}];renderProviderPanels()",ctx);
  assert.ok(elem('providers').innerHTML.includes('۲٬۴۲۲٬۷۵۰'));
  assert.ok(elem('providers').innerHTML.includes('provider-credit'));
+ assert.ok(elem('providers').innerHTML.includes('wallet-identity-edit'));
+ assert.ok(elem('providers').innerHTML.includes('provider-rename-button'));
  assert.ok(elem('providers').innerHTML.includes('provider-overview'));
  assert.ok(elem('providers').innerHTML.includes('provider-stats'));
  assert.ok(elem('providers').innerHTML.includes('provider-balance-chip'));
