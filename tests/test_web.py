@@ -176,6 +176,57 @@ class WebTests(unittest.TestCase):
             after=tuple(db.execute('SELECT COUNT(*),COALESCE(SUM(delta_down),0) FROM samples').fetchone())
         self.assertEqual(before,after)
 
+    def test_cancel_wrong_reconciliation_api_authorization_csrf_and_balances(self):
+        cookie=self.login()
+        st,_,raw=self.request('GET','/api/dashboard?from=2026-10-13&to=2026-10-13',
+            headers={'Cookie':cookie})
+        csrf=json.loads(raw)['csrf']
+        auth={'Cookie':cookie,'Content-Type':'application/json','X-CSRF-Token':csrf}
+        with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+            samples_before=tuple(db.execute(
+                'SELECT COUNT(*),COALESCE(SUM(delta_down),0) FROM samples').fetchone())
+        st,_,raw=self.request('POST','/api/wallets/create',
+            json.dumps({'kind':'money','title':'Undo-API-Test','opening_amount':800000}),auth)
+        self.assertEqual(st,200,raw)
+        account_id=json.loads(raw)['id']
+        try:
+            st,_,raw=self.request('POST','/api/wallets/reconcile',
+                json.dumps({'account_id':account_id,'amount':700000}),auth)
+            self.assertEqual(st,200,raw)
+            st,_,raw=self.request('GET','/api/wallets',headers={'Cookie':cookie})
+            self.assertEqual(st,200)
+            wallet=next(a for a in json.loads(raw)['accounts'] if a['id']==account_id)
+            rec_id=wallet['reconciliation_history'][0]['id']
+            request=json.dumps({'account_id':account_id,'reconciliation_id':rec_id})
+            self.assertEqual(self.request('POST','/api/wallets/reconcile/undo',
+                request)[0],401)
+            self.assertEqual(self.request('POST','/api/wallets/reconcile/undo',
+                request,{'Cookie':cookie,'Content-Type':'application/json'})[0],403)
+            st,_,raw=self.request('POST','/api/wallets/reconcile/undo',request,auth)
+            self.assertEqual(st,200,raw)
+            self.assertEqual(json.loads(raw)['result']['balance_after'],800000)
+            st,_,raw=self.request('GET','/api/wallets',headers={'Cookie':cookie})
+            wallet=next(a for a in json.loads(raw)['accounts'] if a['id']==account_id)
+            self.assertEqual(wallet['estimated_balance'],800000)
+            self.assertEqual(wallet['reconciliation_summary']['count'],0)
+            self.assertIsNotNone(wallet['reconciliation_history'][0]['voided_at'])
+            st,_,raw=self.request('POST','/api/wallets/reconcile/undo',request,auth)
+            self.assertEqual(st,400,raw)
+            with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+                samples_after=tuple(db.execute(
+                    'SELECT COUNT(*),COALESCE(SUM(delta_down),0) FROM samples').fetchone())
+                self.assertEqual(samples_before,samples_after)
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM supplier_reconciliations WHERE account_id=?',
+                    (account_id,)).fetchone()[0],1)
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM supplier_reconciliation_voids WHERE account_id=?',
+                    (account_id,)).fetchone()[0],1)
+        finally:
+            with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+                with db:
+                    db.execute('DELETE FROM supplier_reconciliation_voids WHERE account_id=?',(account_id,))
+                    db.execute('DELETE FROM supplier_reconciliations WHERE account_id=?',(account_id,))
+                    db.execute('DELETE FROM supplier_accounts WHERE id=?',(account_id,))
+
     def test_unassign_wrong_provider_port_preserves_raw_samples(self):
         """A mistaken provider entry must be removable without deleting Xray usage."""
         from supplier_wallets import assign_provider_wallet
