@@ -151,7 +151,8 @@ function renderProviderPanels(){
       '<span class="provider-stat"><small>'+label+'</small><b>'+value+'</b></span>').join('')+'</span>'+
     '<span class="provider-fixed-note">هزینه ثابت تخصیص‌یافته: '+money(fixed)+'</span>'+
     '</button>'+
-    '<div class="provider-tools"><button class="minor provider-report-button" data-provider="'+escapeHtml(name)+'" type="button">جزئیات و گزارش پورت‌ها</button></div>'+
+    '<div class="provider-tools"><button class="minor provider-report-button" data-provider="'+escapeHtml(name)+'" type="button">جزئیات و گزارش پورت‌ها</button>'+
+   (name==='__all__'||name==='بدون ارائه‌دهنده'?'':'<button class="minor provider-rename-button" data-provider="'+escapeHtml(name)+'" type="button">اصلاح نام ارائه‌دهنده</button>')+'</div>'+
     '</div>'+providerWalletDetails(name)+'</article>';
  }).join('');
  document.querySelectorAll('.provider-button').forEach(b=>b.addEventListener('click',()=>{
@@ -159,6 +160,8 @@ function renderProviderPanels(){
  }));
  document.querySelectorAll('.provider-report-button').forEach(b=>
   b.addEventListener('click',()=>openProviderReport(b.dataset.provider)));
+ document.querySelectorAll('.provider-rename-button').forEach(b=>
+  b.addEventListener('click',()=>openProviderRename(b.dataset.provider)));
  document.querySelectorAll('.provider-account-fold').forEach(details=>
   details.addEventListener('toggle',()=>{
    if(details.open)expandedProviderAccounts.add(details.dataset.provider);
@@ -433,7 +436,8 @@ function providerWalletDetails(name){
    '<small>اصلاح موجودی: '+(a.adjustments>0?'+':'')+walletAmount(a.adjustments||0,a.kind)+'</small>'+
    '<small>کسر شده: '+walletAmount(usage,a.kind)+' · پورت‌های فعال: '+active.length+'</small>'+
    reported+
-   '<div class="provider-credit-actions"><button class="minor provider-credit-edit" data-id="'+a.id+'" data-provider="'+escapeHtml(name)+'" type="button">مدیریت پورت‌ها</button>'+
+   '<div class="provider-credit-actions"><button class="minor wallet-identity-edit" data-id="'+a.id+'" type="button">ویرایش مشخصات</button>'+
+   '<button class="minor provider-credit-edit" data-id="'+a.id+'" data-provider="'+escapeHtml(name)+'" type="button">مدیریت پورت‌ها</button>'+
    '<button class="minor provider-credit-topup" data-id="'+a.id+'" type="button">شارژ / خرید حجم</button>'+
    '<button class="minor provider-credit-check" data-id="'+a.id+'" type="button">همسان‌سازی موجودی</button></div>'+
    '<details class="wallet-history"><summary>سابقه پورت‌ها و تراکنش‌ها</summary>'+
@@ -464,6 +468,8 @@ function wireProviderWalletActions(){
   b.addEventListener('click',()=>openProviderWallet(b.dataset.provider)));
  document.querySelectorAll('.provider-credit-edit').forEach(b=>
   b.addEventListener('click',()=>openProviderWallet(b.dataset.provider,Number(b.dataset.id))));
+ document.querySelectorAll('.wallet-identity-edit').forEach(b=>
+  b.addEventListener('click',()=>openWalletIdentity(Number(b.dataset.id))));
  document.querySelectorAll('.provider-credit-topup').forEach(b=>
   b.addEventListener('click',()=>openWalletDialog('credit',Number(b.dataset.id))));
  document.querySelectorAll('.provider-credit-check').forEach(b=>
@@ -514,6 +520,20 @@ function renderProviderWalletPorts(provider,accountId){
    ' · '+escapeHtml(p.bill_direction)+' · '+money((p.price_per_gb||0))+'/GB</small></span></label>';
  }).join('')||'<p class="sub">ابتدا پورت‌های این ارائه‌دهنده را در بخش مدیریت پورت‌ها تعریف کن.</p>';
 }
+function openProviderRename(oldName){
+ $('provider-rename-old').value=oldName;
+ $('provider-rename-old-display').textContent=oldName;
+ $('provider-rename-new').value=oldName;
+ $('provider-rename-dialog').showModal();
+}
+function openWalletIdentity(accountId){
+ const a=walletById(accountId);if(!a)return;
+ $('wallet-identity-id').value=String(a.id);
+ $('wallet-identity-title').value=a.title||'';
+ $('wallet-identity-handle').value=a.bot_handle||'';
+ $('wallet-identity-notes').value=a.notes||'';
+ $('wallet-identity-dialog').showModal();
+}
 function openProviderWallet(provider,accountId=null){
  const account=accountId?walletById(accountId):null;
  if(accountId&&!account){alert('حساب پیدا نشد');return;}
@@ -551,14 +571,42 @@ function openWalletDialog(type,id){
   $('wallet-reported-dialog').showModal();
  }
 }
-async function saveWalletRequest(event,url,read,dialog){
+async function saveWalletRequest(event,url,read,dialog,afterSuccess=null){
  event.preventDefault();
  const button=event.currentTarget.querySelector('button[type=submit]');
  button.disabled=true;
- try{await sendUpdate(url,read());$(dialog).close();await reload();}
- catch(err){alert(err.message);}finally{button.disabled=false;}
+ try{
+  const payload=read();
+  await sendUpdate(url,payload);
+  if(afterSuccess)afterSuccess(payload);
+  $(dialog).close();await reload();
+ }catch(err){alert(err.message);}finally{button.disabled=false;}
 }
 function installWalletForms(){
+ $('provider-rename-cancel').addEventListener('click',()=>$('provider-rename-dialog').close());
+ $('wallet-identity-cancel').addEventListener('click',()=>$('wallet-identity-dialog').close());
+ $('provider-rename-form').addEventListener('submit',e=>saveWalletRequest(
+  e,'/api/providers/rename',()=>{
+   const old_provider=$('provider-rename-old').value;
+   const new_provider=$('provider-rename-new').value.trim();
+   if(!new_provider||new_provider===old_provider)throw Error('نام جدید باید با نام فعلی متفاوت باشد');
+   if(!confirm('نام ارائه‌دهنده «'+old_provider+'» در کل مانیتور به «'+new_provider+
+     '» تغییر کند؟\\nتاریخچه مالی، مانده و پورت‌های واقعی تغییر نمی‌کنند.'))throw Error('اصلاح نام لغو شد');
+   return {old_provider,new_provider};
+  },'provider-rename-dialog',({old_provider,new_provider})=>{
+   if(selectedProvider===old_provider)selectedProvider=new_provider;
+   if(expandedProviderAccounts.delete(old_provider))expandedProviderAccounts.add(new_provider);
+  }));
+ $('wallet-identity-form').addEventListener('submit',e=>saveWalletRequest(
+  e,'/api/wallets/edit',()=>{
+   const a=walletById($('wallet-identity-id').value);
+   if(!a)throw Error('حساب انتخابی پیدا نشد');
+   const title=$('wallet-identity-title').value.trim();
+   if(!title)throw Error('عنوان حساب نمی‌تواند خالی باشد');
+   return {id:a.id,title,bot_handle:$('wallet-identity-handle').value.trim(),
+    notes:$('wallet-identity-notes').value.trim()};
+  },'wallet-identity-dialog'));
+
  $('provider-wallet-mode').addEventListener('change',()=>{
  refreshProviderWalletForm();
  const mode=$('provider-wallet-mode').value;

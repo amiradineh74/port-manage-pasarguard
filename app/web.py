@@ -22,7 +22,7 @@ from units import selected_unit, selected_bytes_per_unit
 from fixed_costs import validate_expense, expenses_report, fixed_total
 from persian_calendar import from_date
 from sales_reporting import save_daily_sale, financial_days
-from supplier_wallets import (wallet_report,create_account,update_account,attach_port,
+from supplier_wallets import (wallet_report,create_account,update_account,rename_provider,attach_port,
     add_credit,report_balance,reconcile_balance,undo_reconciliation,assign_provider_wallet,sync_provider_port)
 
 CFG = None
@@ -316,6 +316,16 @@ class Handler(BaseHTTPRequestHandler):
                     prefs=display_preferences(db)
                     result=save_daily_sale(db,obj,prefs['timezone'])
                 return self.send_json({'ok':True,'entry':result})
+            except (ValueError,TypeError,KeyError,OverflowError) as exc:
+                return self.send_json({'error':str(exc)},400)
+        if path=='/api/providers/rename':
+            try:
+                payload=json.loads(self.read_body())
+                with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
+                    with db:
+                        db.execute('BEGIN IMMEDIATE')
+                        result=rename_provider(db,payload)
+                return self.send_json({'ok':True,'result':result})
             except (ValueError,TypeError,KeyError,OverflowError) as exc:
                 return self.send_json({'error':str(exc)},400)
         if path=='/api/providers/wallet':

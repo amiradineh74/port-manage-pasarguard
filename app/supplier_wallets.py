@@ -58,6 +58,35 @@ def update_account(db,data):
                (title,handle,notes,account['id']))
     return account['id']
 
+def rename_provider(db,data):
+    """Correct a supplier label atomically, never modify underlying accounting.
+
+    Relabel all monitor-side references as one identity: port metadata, wallet
+    association and provider-scoped fixed expenses. Raw samples, bindings,
+    wallet opening values, purchases and reconciliations are untouched.
+    """
+    if type(data) is not dict:raise ValueError('درخواست تغییر نام نامعتبر است')
+    old=text_field(data.get('old_provider'),'نام فعلی ارائه‌دهنده',128,True)
+    new=text_field(data.get('new_provider'),'نام جدید ارائه‌دهنده',128,True)
+    reserved={'__all__','بدون ارائه‌دهنده'}
+    if old in reserved or new in reserved:
+        raise ValueError('این نام برای ارائه‌دهنده مجاز نیست')
+    if old==new:
+        raise ValueError('نام جدید با نام قبلی یکسان است')
+    exists=db.execute('''SELECT 1 FROM metadata WHERE provider=? LIMIT 1''',(old,)).fetchone()
+    linked=db.execute('''SELECT 1 FROM provider_wallet_links WHERE provider=? LIMIT 1''',(old,)).fetchone()
+    if not exists and not linked:
+        raise ValueError('ارائه‌دهنده موردنظر پیدا نشد')
+    for table in ('metadata','provider_wallet_links','fixed_expenses'):
+        if db.execute(f'SELECT 1 FROM {table} WHERE provider=? LIMIT 1',(new,)).fetchone():
+            raise ValueError('نام جدید قبلاً ثبت شده؛ ادغام خودکار ارائه‌دهندگان مجاز نیست')
+    changes={}
+    for table in ('metadata','provider_wallet_links','fixed_expenses'):
+        changes[table]=db.execute(f'UPDATE {table} SET provider=? WHERE provider=?',
+                                  (new,old)).rowcount
+    return {'old_provider':old,'new_provider':new,'updated':changes}
+
+
 def attach_port(db,data):
     account=known_account(db,data.get('account_id'))
     node=require_int(data.get('node_id'),'شناسه نود',1,2**31-1)

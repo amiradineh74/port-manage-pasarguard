@@ -176,6 +176,62 @@ class WebTests(unittest.TestCase):
             after=tuple(db.execute('SELECT COUNT(*),COALESCE(SUM(delta_down),0) FROM samples').fetchone())
         self.assertEqual(before,after)
 
+    def test_provider_rename_and_account_label_edit_are_csrf_protected(self):
+        from supplier_wallets import create_account
+        cookie=self.login()
+        st,_,raw=self.request('GET','/api/dashboard?from=2026-10-13&to=2026-10-13',
+                               headers={'Cookie':cookie})
+        self.assertEqual(st,200)
+        csrf=json.loads(raw)['csrf']
+        headers={'Cookie':cookie,'Content-Type':'application/json','X-CSRF-Token':csrf}
+        with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+            with db:
+                aid=create_account(db,{'kind':'money','title':'wrong spelling',
+                       'bot_handle':'@wrong','opening_amount':5000000})
+                db.execute('INSERT INTO provider_wallet_links(provider,account_id) VALUES(?,?)',
+                    ('source-typo',aid))
+                db.execute('INSERT INTO metadata(node_id,port,provider) VALUES(?,?,?)',
+                    (999,40550,'source-typo'))
+                db.execute("""INSERT INTO fixed_expenses
+                    (label,category,scope,node_id,provider,frequency,amount_rial,start_date)
+                    VALUES('Provider bill','server','provider',NULL,'source-typo','monthly',600000,'2026-10-13')""")
+                fixed_id=db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            sample_snapshot=tuple(db.execute(
+                'SELECT COUNT(*),COALESCE(SUM(delta_down),0) FROM samples').fetchone())
+        try:
+            payload=json.dumps({'old_provider':'source-typo','new_provider':'source-fixed'})
+            self.assertEqual(self.request('POST','/api/providers/rename',payload)[0],401)
+            self.assertEqual(self.request('POST','/api/providers/rename',payload,
+                {'Cookie':cookie,'Content-Type':'application/json'})[0],403)
+            status,_,raw=self.request('POST','/api/providers/rename',payload,headers)
+            self.assertEqual(status,200,raw)
+            self.assertEqual(json.loads(raw)['result']['updated']['metadata'],1)
+            duplicate=json.dumps({'old_provider':'source-fixed','new_provider':'source-fixed'})
+            self.assertEqual(self.request('POST','/api/providers/rename',duplicate,headers)[0],400)
+            identity=json.dumps({'id':aid,'title':'Correct account',
+                'bot_handle':'@correct','notes':'Corrected typo'})
+            status,_,raw=self.request('POST','/api/wallets/edit',identity,headers)
+            self.assertEqual(status,200,raw)
+            with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+                self.assertEqual(db.execute('SELECT provider FROM metadata WHERE node_id=999').fetchone()[0],'source-fixed')
+                self.assertEqual(db.execute('SELECT provider FROM fixed_expenses WHERE id=?',
+                    (fixed_id,)).fetchone()[0],'source-fixed')
+                self.assertEqual(db.execute('SELECT provider FROM provider_wallet_links WHERE account_id=?',
+                    (aid,)).fetchone()[0],'source-fixed')
+                row=db.execute('SELECT title,bot_handle,opening_rial FROM supplier_accounts WHERE id=?',
+                    (aid,)).fetchone()
+                self.assertEqual(tuple(row),('Correct account','@correct',5000000))
+                self.assertEqual(tuple(db.execute(
+                    'SELECT COUNT(*),COALESCE(SUM(delta_down),0) FROM samples').fetchone()),
+                    sample_snapshot)
+        finally:
+            with connect(Path(self.tmp.name)/'traffic.sqlite3') as db:
+                with db:
+                    db.execute('DELETE FROM fixed_expenses WHERE id=?',(fixed_id,))
+                    db.execute('DELETE FROM metadata WHERE node_id=999 AND port=40550')
+                    db.execute('DELETE FROM provider_wallet_links WHERE account_id=?',(aid,))
+                    db.execute('DELETE FROM supplier_accounts WHERE id=?',(aid,))
+
     def test_cancel_wrong_reconciliation_api_authorization_csrf_and_balances(self):
         cookie=self.login()
         st,_,raw=self.request('GET','/api/dashboard?from=2026-10-13&to=2026-10-13',
