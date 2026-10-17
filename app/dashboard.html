@@ -32,7 +32,7 @@
 <section class="panel finance-panel workspace-view" id="finance">
  <div class="section-head finance-head">
   <div><h2>دفتر فروش و سود روزانه</h2>
-   <p>ثبت فروش شبانه، شمارش اکانت‌های فروخته‌شده و گزارش سود روزانه، هفتگی و ماه شمسی. هزینه ترافیک با نرخ فعلی پورت‌ها و سهم هزینه ثابت با تعداد روزهای واقعی همان ماه شمسی (۲۹، ۳۰ یا ۳۱ روز) محاسبه می‌شود.</p></div>
+   <p>فروش یک روز را ثبت کن، سپس سود همان روز، هفته یا ماه را به‌سادگی ببین.</p></div>
   <span class="finance-safety">فقط اطلاعات مانیتور مستقل</span>
  </div>
  <div id="finance-alert" class="finance-alert" role="status" aria-live="polite" hidden></div>
@@ -94,7 +94,7 @@
 <div class="section-head cost-heading"><div><h2>نمودار تاریخی هزینه با تعرفه فعلی</h2><p>بازه انتخاب‌شده و ارائه‌دهنده / نود انتخابی؛ مبلغ ریالی یا تومانی متناسب با تنظیمات</p></div></div>
 <div id="cost-chart" class="chart"><span>در حال آماده‌سازی نمودار...</span></div></div></details></section>
 <section class="panel workspace-view" id="manage">
-  <div class="section-head"><div><h2>مدیریت پورت‌ها و تنظیمات</h2>
+  <div class="section-head"><div><h2>مدیریت پورت‌ها</h2>
     <p>بدون دستور ترمینال: انتخاب پورت‌های هر سرور و تنظیم عنوان و اطلاعات گزارش‌ها</p></div></div>
   <h3>پورت‌های قابل نمایش هر سرور</h3>
   <p class="sub">هر سرور را جداگانه ذخیره کن. پورت مخفی‌شده حذف نمی‌شود و در آمار و هزینه نمایشی لحاظ نخواهد شد.</p>
@@ -112,7 +112,7 @@
       <datalist id="timezones"><option value="Asia/Tehran"></option><option value="UTC"></option><option value="Europe/Berlin"></option><option value="Europe/Istanbul"></option></datalist>
       <button class="primary" type="submit">ذخیره تنظیمات نمایش</button>
     </form>
-    <p class="sub">تغییرات این بخش فقط در دیتابیس مستقل مانیتورینگ ذخیره می‌شود. تغییر تعرفه و نام هر پورت از دکمه «ویرایش» جدول بالا انجام می‌شود.</p>
+    <p class="sub">تغییرات این بخش فقط در دیتابیس مستقل مانیتورینگ ذخیره می‌شود. برای تغییر تعرفه یا نام هر پورت، به بخش «پورت‌ها» برو.</p>
   </div>
 </section>
 <section class="panel workspace-view" id="expenses">
@@ -175,12 +175,12 @@
 <h2 id="provider-wallet-heading">تعریف حساب اعتبار ارائه‌دهنده</h2>
 <input id="provider-wallet-name" type="hidden">
 <input id="provider-wallet-edit-id" type="hidden">
-<p>ارائه‌دهنده: <strong id="provider-wallet-display"></strong></p>
-<label>عملیات<select id="provider-wallet-mode">
+<p>ارائه‌دهنده: <strong id="provider-wallet-display"></strong></p><p class="wallet-create-hint">نام حساب، نوع اعتبار، موجودی اولیه و پورت‌های مربوط را وارد کن. ثبت این فرم تأثیری بر ربات اصلی ندارد.</p>
+<details class="analysis-disclosure wallet-advanced-operation" id="wallet-advanced-operation"><summary>عملیات پیشرفته حساب</summary><label>نوع عملیات<select id="provider-wallet-mode">
 <option value="new">ساخت حساب مستقل جدید</option>
 <option value="existing">اتصال کیف پول قبلی به این ارائه‌دهنده</option>
 <option value="edit">ویرایش پورت‌های حساب موجود</option>
-</select></label>
+</select></label></details>
 <div id="provider-wallet-existing-wrap" hidden><label>حساب قبلی<select id="provider-wallet-existing"></select></label>
 <p class="sub">موجودی، سوابق شارژ و تاریخ شروع حساب قبلی حفظ می‌شوند.</p></div>
 <div id="provider-wallet-new-wrap">
