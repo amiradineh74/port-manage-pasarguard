@@ -76,6 +76,72 @@ class WalletTests(unittest.TestCase):
         self.assertEqual(report['reconciliation_history'][2]['note'],'First bot comparison')
         self.assertEqual(self.db.execute('SELECT SUM(delta_down) FROM samples').fetchone()[0],3*GiB)
 
+    def test_undo_latest_money_reconciliation_preserves_audit(self):
+        with patch.object(wallets,'utc_now',return_value='2026-10-14T01:01:00+00:00'):
+            aid=wallets.create_account(self.db,{'kind':'money','title':'Bot',
+                 'opening_amount':2000000})
+        with patch.object(wallets,'utc_now',return_value='2026-10-14T01:02:00+00:00'):
+            wallets.reconcile_balance(self.db,{'account_id':aid,'amount':1900000,
+                'note':'first incorrect'})
+        with patch.object(wallets,'utc_now',return_value='2026-10-14T01:03:00+00:00'):
+            wallets.reconcile_balance(self.db,{'account_id':aid,'amount':1800000,
+                'note':'second incorrect'})
+        history=wallets.wallet_report(self.db)[0]['reconciliation_history']
+        first,second=history[1]['id'],history[0]['id']
+        self.assertEqual(wallets.wallet_report(self.db)[0]['estimated_balance'],1800000)
+        with self.assertRaisesRegex(ValueError,'جدیدتر'):
+            wallets.undo_reconciliation(self.db,{'account_id':aid,'reconciliation_id':first})
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM supplier_reconciliation_voids').fetchone()[0],0)
+        with patch.object(wallets,'utc_now',return_value='2026-10-14T01:04:00+00:00'):
+            result=wallets.undo_reconciliation(self.db,{'account_id':aid,
+                    'reconciliation_id':second,'reason':'entered in error'})
+        self.assertEqual(result['balance_before'],1800000)
+        self.assertEqual(result['balance_after'],1900000)
+        state=wallets.wallet_report(self.db)[0]
+        self.assertEqual(state['estimated_balance'],1900000)
+        self.assertEqual(state['reported_balance'],1900000)
+        self.assertEqual(state['reconciliation_summary']['count'],1)
+        self.assertEqual(state['reconciliation_summary']['net'],-100000)
+        self.assertIsNotNone(state['reconciliation_history'][0]['voided_at'])
+        self.assertEqual(state['reconciliation_history'][0]['void_reason'],'entered in error')
+        with self.assertRaisesRegex(ValueError,'قبلاً لغو'):
+            wallets.undo_reconciliation(self.db,{'account_id':aid,'reconciliation_id':second})
+        with patch.object(wallets,'utc_now',return_value='2026-10-14T01:05:00+00:00'):
+            wallets.undo_reconciliation(self.db,{'account_id':aid,'reconciliation_id':first})
+        state=wallets.wallet_report(self.db)[0]
+        self.assertEqual(state['estimated_balance'],2000000)
+        self.assertIsNone(state['reported_balance'])
+        self.assertEqual(state['reconciliation_summary']['count'],0)
+        self.assertEqual(state['reconciliation_summary']['net'],0)
+        self.assertEqual(len(state['reconciliation_history']),2)
+        self.assertEqual(self.db.execute(
+            'SELECT COUNT(*) FROM supplier_reconciliations WHERE account_id=?',
+            (aid,)).fetchone()[0],2)
+        self.assertEqual(self.db.execute(
+            'SELECT COUNT(*) FROM supplier_reconciliation_voids WHERE account_id=?',
+            (aid,)).fetchone()[0],2)
+        self.assertEqual(self.db.execute('SELECT SUM(delta_down) FROM samples').fetchone()[0],3*GiB)
+
+    def test_undo_volume_after_further_usage_only_reverses_correction(self):
+        with patch.object(wallets,'utc_now',return_value='2026-10-14T01:01:00+00:00'):
+            aid=wallets.create_account(self.db,{'kind':'volume','title':'Quota',
+                 'opening_amount':230*GiB})
+            wallets.attach_port(self.db,{'account_id':aid,'node_id':7,'port':47307,
+                'direction':'downlink','rate_rial_per_gb':0})
+        with patch.object(wallets,'utc_now',return_value='2026-10-14T01:02:00+00:00'):
+            wallets.reconcile_balance(self.db,{'account_id':aid,'amount':220*GiB})
+        reconciliation_id=wallets.wallet_report(self.db)[0]['latest_active_reconciliation_id']
+        self.poll(6*GiB,GiB//2,'2026-10-14T01:03:00+00:00')
+        state=wallets.wallet_report(self.db)[0]
+        self.assertEqual(state['estimated_balance'],217*GiB)
+        with patch.object(wallets,'utc_now',return_value='2026-10-14T01:04:00+00:00'):
+            wallets.undo_reconciliation(self.db,{'account_id':aid,'reconciliation_id':reconciliation_id})
+        after=wallets.wallet_report(self.db)[0]
+        self.assertEqual(after['estimated_balance'],227*GiB)
+        self.assertEqual(after['used_bytes'],3*GiB)
+        self.assertEqual(after['reconciliation_summary']['net'],0)
+        self.assertIsNone(after['reported_balance'])
+
     def test_reconcile_quota_and_future_usage_keeps_correction(self):
         with patch.object(wallets,'utc_now',return_value='2026-10-14T01:01:00+00:00'):
             aid=wallets.create_account(self.db,{'kind':'volume','title':'Quota',
