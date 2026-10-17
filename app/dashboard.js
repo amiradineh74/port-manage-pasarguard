@@ -873,6 +873,9 @@ function activateWorkspace(href){
  const target=Object.prototype.hasOwnProperty.call(workspaceTargets,href)?href:'#overview';
  for(const [key,id] of Object.entries(workspaceTargets))
   $(id).hidden=(target!==key);
+ const showTrafficRange=target==='#overview'||target==='#providers-section';
+ $('overview').hidden=!showTrafficRange;
+ $('status').hidden=!showTrafficRange;
  highlightSection(target);
  setNavigationOpen(false);
 }
