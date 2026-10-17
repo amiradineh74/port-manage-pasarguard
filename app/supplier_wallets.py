@@ -248,6 +248,51 @@ def reconcile_balance(db,data):
             'estimated_before':before,'reported_balance':reported,
             'balance_after':reported}
 
+def undo_reconciliation(db,data):
+    """Cancel only the latest active correction; retain the original audit row.
+
+    Caller must hold BEGIN IMMEDIATE so the latest-entry check, void record,
+    reported snapshot and balance are a single atomic operation. Requiring
+    newest first prevents silently invalidating later balance checkpoints.
+    """
+    if type(data) is not dict:raise ValueError('درخواست لغو همسان‌سازی نامعتبر است')
+    account=known_account(db,data.get('account_id'))
+    reconcile_id=require_int(data.get('reconciliation_id'),'شناسه همسان‌سازی',1)
+    reason=text_field(data.get('reason',''),'دلیل لغو',250)
+    target=db.execute('''SELECT id,adjustment FROM supplier_reconciliations
+        WHERE id=? AND account_id=?''',(reconcile_id,account['id'])).fetchone()
+    if target is None:raise ValueError('همسان‌سازی متعلق به این حساب پیدا نشد')
+    already=db.execute('''SELECT 1 FROM supplier_reconciliation_voids
+        WHERE reconciliation_id=?''',(reconcile_id,)).fetchone()
+    if already:raise ValueError('این همسان‌سازی قبلاً لغو شده است')
+    latest=db.execute('''SELECT r.id FROM supplier_reconciliations r
+        LEFT JOIN supplier_reconciliation_voids v ON v.reconciliation_id=r.id
+        WHERE r.account_id=? AND v.reconciliation_id IS NULL
+        ORDER BY r.checked_at DESC,r.id DESC LIMIT 1''',(account['id'],)).fetchone()
+    if latest is None or latest['id']!=reconcile_id:
+        raise ValueError('برای حفظ ترتیب حسابداری، ابتدا همسان‌سازی‌های جدیدتر را لغو کنید')
+    bindings=[dict(row) for row in db.execute(
+        'SELECT * FROM supplier_ports WHERE account_id=?',(account['id'],))]
+    balance_before=_estimate(db,account,bindings)['estimated_balance']
+    db.execute('''INSERT INTO supplier_reconciliation_voids
+        (reconciliation_id,account_id,voided_at,reason) VALUES(?,?,?,?)''',
+        (reconcile_id,account['id'],utc_now(),reason))
+    previous=db.execute('''SELECT r.reported_amount,r.checked_at
+        FROM supplier_reconciliations r
+        LEFT JOIN supplier_reconciliation_voids v ON v.reconciliation_id=r.id
+        WHERE r.account_id=? AND v.reconciliation_id IS NULL
+        ORDER BY r.checked_at DESC,r.id DESC LIMIT 1''',(account['id'],)).fetchone()
+    reported_column='reported_rial' if account['kind']=='money' else 'reported_bytes'
+    db.execute('UPDATE supplier_accounts SET '+reported_column+
+               '=?,reported_at=? WHERE id=?',
+               (previous['reported_amount'] if previous else None,
+                previous['checked_at'] if previous else '',account['id']))
+    balance_after=_estimate(db,account,bindings)['estimated_balance']
+    return {'account_id':account['id'],'reconciliation_id':reconcile_id,
+            'reversed_adjustment':-target['adjustment'],
+            'balance_before':balance_before,'balance_after':balance_after}
+
+
 def report_balance(db,data):
     """Backwards-compatible endpoint now performs a genuine synchronization."""
     return reconcile_balance(db,data)
@@ -297,9 +342,11 @@ def _estimate(db,account,bindings,until=None):
       (account['id'],account['started_at'],until) if until else
       (account['id'],account['started_at'])).fetchone()[0]
     initial=account['opening_rial'] if account['kind']=='money' else account['opening_bytes']
-    adjustments=db.execute('''SELECT COALESCE(SUM(adjustment),0)
-        FROM supplier_reconciliations WHERE account_id=?'''+
-        (' AND checked_at<=?' if until else ''),
+    adjustments=db.execute('''SELECT COALESCE(SUM(r.adjustment),0)
+        FROM supplier_reconciliations r
+        LEFT JOIN supplier_reconciliation_voids v ON v.reconciliation_id=r.id
+        WHERE r.account_id=? AND v.reconciliation_id IS NULL'''+
+        (' AND r.checked_at<=?' if until else ''),
         (account['id'],until) if until else (account['id'],)).fetchone()[0]
     balance=int(initial)+int(credits)+int(adjustments)-(
         spent_rial if account['kind']=='money' else spent_bytes)
@@ -322,15 +369,21 @@ def wallet_report(db):
         checks=[dict(r) for r in db.execute(
             'SELECT * FROM supplier_checks WHERE account_id=? ORDER BY id DESC LIMIT 20',(a['id'],))]
         history=[dict(r) for r in db.execute(
-            '''SELECT * FROM supplier_reconciliations WHERE account_id=?
-               ORDER BY checked_at DESC,id DESC LIMIT 2000''',(a['id'],))]
-        comparison=history[0]['adjustment'] if history else (
+            '''SELECT r.*,v.voided_at,v.reason AS void_reason
+               FROM supplier_reconciliations r
+               LEFT JOIN supplier_reconciliation_voids v ON v.reconciliation_id=r.id
+               WHERE r.account_id=?
+               ORDER BY r.checked_at DESC,r.id DESC LIMIT 2000''',(a['id'],))]
+        active_history=[h for h in history if not h['voided_at']]
+        comparison=active_history[0]['adjustment'] if active_history else (
             checks[0]['difference'] if checks else None)
         totals=db.execute('''SELECT COUNT(*),
-          COALESCE(SUM(CASE WHEN adjustment>0 THEN adjustment ELSE 0 END),0),
-          COALESCE(SUM(CASE WHEN adjustment<0 THEN -adjustment ELSE 0 END),0),
-          COALESCE(SUM(adjustment),0)
-          FROM supplier_reconciliations WHERE account_id=?''',(a['id'],)).fetchone()
+          COALESCE(SUM(CASE WHEN r.adjustment>0 THEN r.adjustment ELSE 0 END),0),
+          COALESCE(SUM(CASE WHEN r.adjustment<0 THEN -r.adjustment ELSE 0 END),0),
+          COALESCE(SUM(r.adjustment),0)
+          FROM supplier_reconciliations r
+          LEFT JOIN supplier_reconciliation_voids v ON v.reconciliation_id=r.id
+          WHERE r.account_id=? AND v.reconciliation_id IS NULL''',(a['id'],)).fetchone()
         reconciliation_summary={'count':totals[0],'positive':totals[1],
             'negative':totals[2],'net':totals[3]}
 
@@ -340,5 +393,7 @@ def wallet_report(db):
                              comparison_gap=comparison,credit_history=credits,
                              check_history=checks,
                              reconciliation_history=history,
+                             latest_active_reconciliation_id=(
+                                 active_history[0]['id'] if active_history else None),
                              reconciliation_summary=reconciliation_summary))
     return accounts

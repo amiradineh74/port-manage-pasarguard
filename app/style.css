@@ -626,3 +626,16 @@ body dialog h2{padding-bottom:8px;border-bottom:1px solid var(--line)}
  .finance-entry form{grid-template-columns:1fr}
  .finance-entry label:nth-of-type(3){grid-column:auto}
 }
+
+/* Auditable reconciliation cancellation. Existing entries remain readable. */
+.wallet-reconcile-undo{
+ border:1px solid #a46a58;color:#f4c4b3;font-size:11px;
+ white-space:normal;min-height:38px;padding:7px 10px;
+}
+.wallet-reconcile-undo:hover{border-color:#f2a58b}
+.wallet-reconcile-undo:disabled{opacity:.55;cursor:wait}
+.wallet-voided{opacity:.68}
+.wallet-voided-label{
+ color:#f1bd9e;font-size:11px;font-weight:700;
+}
+.wallet-reconciliations td:last-child{white-space:normal;min-width:132px}

@@ -107,6 +107,15 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  assert.ok(elem('providers').innerHTML.includes('class="provider-account-fold" data-provider="A" open'));
  vm.runInContext("selectedProvider='__all__'",ctx);
  vm.runInContext("state.wallets[0].reconciliation_summary={count:3,positive:150000,negative:100000,net:50000};state.wallets[0].reconciliation_history=[{id:3,checked_at:'2026-10-17T12:00:00+00:00',estimated_before:2300000,reported_amount:2250000,adjustment:-50000,note:'third'}, {id:2,checked_at:'2026-10-16T12:00:00+00:00',estimated_before:2150000,reported_amount:2300000,adjustment:150000,note:'second'},{id:1,checked_at:'2026-10-14T12:00:00+00:00',estimated_before:2300000,reported_amount:2250000,adjustment:-50000,note:'first'}];renderProviderPanels()",ctx);
+ vm.runInContext("state.wallets[0].latest_active_reconciliation_id=3;renderProviderPanels()",ctx);
+ assert.ok(elem('providers').innerHTML.includes('wallet-reconcile-undo'));
+ assert.ok(elem('providers').innerHTML.includes('data-reconciliation="3"'));
+ assert.ok(!elem('providers').innerHTML.includes('data-reconciliation="2"'));
+ vm.runInContext("state.wallets[0].reconciliation_history[0].voided_at='2026-10-17T13:00:00+00:00';state.wallets[0].reconciliation_history[0].void_reason='اشتباه وارد شد';state.wallets[0].latest_active_reconciliation_id=2;renderProviderPanels()",ctx);
+ assert.ok(elem('providers').innerHTML.includes('لغوشده'));
+ assert.ok(elem('providers').innerHTML.includes('اشتباه وارد شد'));
+ assert.ok(!elem('providers').innerHTML.includes('data-reconciliation="3"'));
+ assert.ok(elem('providers').innerHTML.includes('data-reconciliation="2"'));
  assert.ok(elem('providers').innerHTML.includes('تاریخچه همسان‌سازی'));
  assert.ok(elem('providers').innerHTML.includes('اختلاف خالص'));
  assert.ok(elem('providers').innerHTML.includes('second'));

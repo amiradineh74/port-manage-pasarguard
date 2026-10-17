@@ -156,6 +156,16 @@ CREATE TABLE IF NOT EXISTS supplier_reconciliations (
 );
 CREATE INDEX IF NOT EXISTS idx_supplier_reconciliations_account
  ON supplier_reconciliations(account_id,checked_at,id);
+-- An audit-preserving cancellation: never DELETE the original reconciliation.
+-- A void contributes zero to balance and summaries; its history stays visible.
+CREATE TABLE IF NOT EXISTS supplier_reconciliation_voids (
+ reconciliation_id INTEGER PRIMARY KEY REFERENCES supplier_reconciliations(id),
+ account_id INTEGER NOT NULL REFERENCES supplier_accounts(id),
+ voided_at TEXT NOT NULL,
+ reason TEXT NOT NULL DEFAULT '' CHECK(length(reason)<=250)
+);
+CREATE INDEX IF NOT EXISTS idx_supplier_voids_account
+ ON supplier_reconciliation_voids(account_id,voided_at);
 
 
 

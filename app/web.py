@@ -23,7 +23,7 @@ from fixed_costs import validate_expense, expenses_report, fixed_total
 from persian_calendar import from_date
 from sales_reporting import save_daily_sale, financial_days
 from supplier_wallets import (wallet_report,create_account,update_account,attach_port,
-    add_credit,report_balance,reconcile_balance,assign_provider_wallet,sync_provider_port)
+    add_credit,report_balance,reconcile_balance,undo_reconciliation,assign_provider_wallet,sync_provider_port)
 
 CFG = None
 ROOT = Path(__file__).resolve().parent
@@ -331,7 +331,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({'error':'این ارائه‌دهنده قبلاً حساب اعتبار دارد'},400)
         if path in ('/api/wallets/create','/api/wallets/edit',
                     '/api/wallets/attach','/api/wallets/credit',
-                    '/api/wallets/reported','/api/wallets/reconcile'):
+                    '/api/wallets/reported','/api/wallets/reconcile',
+                    '/api/wallets/reconcile/undo'):
             try:
                 payload=json.loads(self.read_body())
                 if type(payload) is not dict:raise ValueError('درخواست نامعتبر است')
@@ -342,10 +343,12 @@ class Handler(BaseHTTPRequestHandler):
                   '/api/wallets/credit':add_credit,
                   '/api/wallets/reported':report_balance,
                   '/api/wallets/reconcile':reconcile_balance,
+                  '/api/wallets/reconcile/undo':undo_reconciliation,
                 }
                 with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
                     with db:
-                        if path in ('/api/wallets/reconcile','/api/wallets/reported'):
+                        if path in ('/api/wallets/reconcile','/api/wallets/reported',
+                                    '/api/wallets/reconcile/undo'):
                             db.execute('BEGIN IMMEDIATE')  # lock consistent balance snapshot
                         result=handlers[path](db,payload)
                 return self.send_json({'ok':True,'id':result if type(result) is int else result.get('account_id'), 'result':result})

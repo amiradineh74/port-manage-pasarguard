@@ -375,6 +375,7 @@ function walletReconciliationHistory(a){
  const all=a.reconciliation_summary||{count:0,positive:0,negative:0,net:0};
  const months=new Map();
  for(const entry of history){
+  if(entry.voided_at)continue;
   const key=walletMonth(entry.checked_at);
   if(!months.has(key))months.set(key,{positive:0,negative:0,net:0,count:0});
   const m=months.get(key),delta=Number(entry.adjustment);
@@ -386,19 +387,29 @@ function walletReconciliationHistory(a){
  const monthRows=[...months.entries()].sort((x,y)=>y[0].localeCompare(x[0]))
    .map(([key,m])=>'<div class="wallet-month"><strong>'+escapeHtml(persianDigits(key))+
        ' · '+persianDigits(m.count)+' نوبت</strong>'+row(m)+'</div>').join('');
- const checks=history.map(h=>'<tr><td>'+escapeHtml(walletDate(h.checked_at))+
+ const checks=history.map(h=>{
+  const cancelled=Boolean(h.voided_at);
+  const canUndo=!cancelled&&a.latest_active_reconciliation_id===h.id;
+  const status=cancelled?
+    '<span class="wallet-voided-label">لغوشده · '+escapeHtml(walletDate(h.voided_at))+'</span>'+
+    (h.void_reason?' · '+escapeHtml(h.void_reason):''):
+    canUndo?'<button type="button" class="minor wallet-reconcile-undo" data-account="'+a.id+
+      '" data-reconciliation="'+h.id+'">لغو این همسان‌سازی</button>':
+    '<span class="sub">برای لغو، ابتدا موارد جدیدتر را لغو کن</span>';
+  return '<tr class="'+(cancelled?'wallet-voided':'')+'"><td>'+escapeHtml(walletDate(h.checked_at))+
     '</td><td>'+walletAmount(h.estimated_before,a.kind)+'</td>'+
     '<td>'+walletAmount(h.reported_amount,a.kind)+'</td>'+
     '<td>'+ (h.adjustment>0?'+':'')+walletAmount(h.adjustment,a.kind)+'</td>'+
-    '<td>'+escapeHtml(h.note||'—')+'</td></tr>').join('');
+    '<td>'+escapeHtml(h.note||'—')+'</td><td>'+status+'</td></tr>';
+ }).join('');
  return '<details class="wallet-reconciliations"><summary>تاریخچه همسان‌سازی ('+
    persianDigits(all.count)+' بار)</summary>'+
-   '<p class="sub">اختلاف مثبت یعنی مانده ربات بیشتر بوده؛ منفی یعنی کمتر بوده. این اصلاحات، مصرف و شارژ قبلی را حذف نمی‌کنند.</p>'+
+   '<p class="sub">اختلاف مثبت یعنی مانده ربات بیشتر بوده؛ منفی یعنی کمتر بوده. لغو تنها از آخرین همسان‌سازی فعال ممکن است؛ سابقه لغو برای حسابرسی باقی می‌ماند و مصرف و شارژ دست‌نخورده است.</p>'+
    '<div class="wallet-month"><strong>جمع کل همسان‌سازی‌ها</strong>'+row(all)+'</div>'+
    monthRows+
    '<div class="table-scroll"><table><thead><tr><th>تاریخ</th><th>مانده پیش از اصلاح</th>'+
-   '<th>مانده ربات</th><th>اختلاف اصلاح‌شده</th><th>توضیح</th></tr></thead>'+
-   '<tbody>'+ (checks||'<tr><td colspan="5">هنوز همسان‌سازی ثبت نشده است.</td></tr>')+
+   '<th>مانده ربات</th><th>اختلاف اصلاح‌شده</th><th>توضیح</th><th>وضعیت / عملیات</th></tr></thead>'+
+   '<tbody>'+ (checks||'<tr><td colspan="6">هنوز همسان‌سازی ثبت نشده است.</td></tr>')+
    '</tbody></table></div></details>';
 }
 // Preserve account disclosure state across refreshes and chart filtering.
@@ -457,6 +468,22 @@ function wireProviderWalletActions(){
   b.addEventListener('click',()=>openWalletDialog('credit',Number(b.dataset.id))));
  document.querySelectorAll('.provider-credit-check').forEach(b=>
   b.addEventListener('click',()=>openWalletDialog('reported',Number(b.dataset.id))));
+ document.querySelectorAll('.wallet-reconcile-undo').forEach(b=>
+  b.addEventListener('click',async()=>{
+   const accountId=Number(b.dataset.account),reconciliationId=Number(b.dataset.reconciliation);
+   const account=walletById(accountId);
+   const entry=account?.reconciliation_history?.find(x=>x.id===reconciliationId);
+   if(!entry||entry.voided_at||entry.id!==account.latest_active_reconciliation_id)return;
+   const correction=(entry.adjustment>0?'+':'')+walletAmount(entry.adjustment,account.kind);
+   if(!confirm('همسان‌سازی حساب «'+account.title+'» در تاریخ '+
+     walletDate(entry.checked_at)+' با اصلاح '+correction+
+     ' لغو شود؟\\nمانده حساب مجدداً محاسبه می‌شود. آمار مصرف و شارژ حذف نمی‌شود و سابقه لغو قابل مشاهده می‌ماند.'))return;
+   b.disabled=true;
+   try{await sendUpdate('/api/wallets/reconcile/undo',
+    {account_id:accountId,reconciliation_id:reconciliationId});
+    await reload();
+   }catch(err){alert(err.message);b.disabled=false;}
+  }));
 }
 function refreshProviderWalletForm(){
  const mode=$('provider-wallet-mode').value;
