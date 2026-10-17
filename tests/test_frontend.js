@@ -11,7 +11,7 @@ function elem(id){
    attributes:{},setAttribute(k,v){this.attributes[k]=String(v);},
    removeAttribute(k){delete this.attributes[k];},
    getAttribute(k){return this.attributes[k]||null;},
-   addEventListener(){},querySelectorAll(){return[];},showModal(){},close(){},selectedIndex:0});
+   addEventListener(){},querySelector(){return {disabled:false};},querySelectorAll(){return[];},showModal(){},close(){},selectedIndex:0});
  }
  return elements.get(id);
 }
@@ -23,11 +23,18 @@ const Jalali={...realJalali,attach(field,displayId){
   };
 }};
 const dashboardTemplate=fs.readFileSync(path.join(__dirname,'../app/dashboard.html'),'utf8');
-const navigationLabels=['نمای کلی','نمودار و ارائه‌دهندگان','مدیریت پورت‌ها','هزینه‌های ثابت','تنظیمات'];
+const navigationLabels=['نمای کلی','حساب‌ها و ارائه‌دهندگان','پورت‌ها','هزینه‌های ثابت','تنظیمات'];
 for(const name of navigationLabels)assert.ok(dashboardTemplate.includes('>'+name+'</a>'),'missing navigation: '+name);
 assert.ok(dashboardTemplate.indexOf('id="expenses"')>dashboardTemplate.indexOf('id="manage"'),
  'Fixed costs must follow management/settings section');
 assert.ok(dashboardTemplate.includes('class="expense-formula"'));
+assert.ok(dashboardTemplate.includes('class="workspace-hero"'));
+assert.ok(dashboardTemplate.includes('id="reconciliation-overview"'));
+assert.ok(dashboardTemplate.includes('class="finance-report-details"'));
+assert.ok(dashboardTemplate.includes('id="wallet-advanced-operation"'));
+assert.ok(dashboardTemplate.includes('class="analysis-disclosure provider-trends"'));
+assert.ok(dashboardTemplate.includes('class="panel workspace-view" id="settings-section"'));
+assert.ok(dashboardTemplate.includes('id="manage"') && !dashboardTemplate.includes('<div class="prefs" id="settings-section"'));
 assert.ok(dashboardTemplate.includes('id="main-nav"'));
 assert.ok(dashboardTemplate.includes('id="nav-toggle"'));
 assert.ok(dashboardTemplate.includes('id="nav-backdrop"'));
@@ -48,6 +55,8 @@ assert.ok(css.includes('.section-nav[data-open="true"]'));
 assert.ok(css.includes('v2.1 provider directory'));
 assert.ok(css.includes('.provider-account-fold[open]'));
 assert.ok(css.includes('.providers{\n display:flex;flex-direction:column'));
+assert.ok(css.includes('.workspace-view[hidden]{display:none!important}'));
+assert.ok(css.includes('.reconciliation-overview{'));
 
 const storage=new Map();
 const daily=[
@@ -124,7 +133,15 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  assert.ok(elem('providers').innerHTML.includes('اختلاف خالص'));
  assert.ok(elem('providers').innerHTML.includes('second'));
  assert.ok(elem('providers').innerHTML.includes('first'));
- assert.ok(elem('providers').innerHTML.includes('جزئیات و گزارش پورت‌ها'));
+ assert.ok(elem('providers').innerHTML.includes('گزارش پورت‌ها'));
+ assert.ok(elem('providers').innerHTML.includes('provider-quick-create'));
+ vm.runInContext("openProviderWallet('A')",ctx);
+ assert.equal(elem('wallet-advanced-operation').open,false);
+ vm.runInContext("openProviderWallet('A',11)",ctx);
+ assert.equal(elem('wallet-advanced-operation').open,true);
+ assert.ok(elem('reconciliation-overview').innerHTML.includes('آخرین مغایرت‌های ثبت‌شده'));
+ assert.ok(elem('reconciliation-overview').innerHTML.includes('مشاهده حساب'));
+
  vm.runInContext("openProviderReport('A')",ctx);
  assert.ok(elem('provider-report-title').textContent.includes('A'));
  assert.ok(elem('ports').innerHTML.includes('unassign-port'));
@@ -154,6 +171,25 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  vm.runInContext('setNavigationOpen(false)',ctx);
  assert.equal(elem('main-nav').dataset.open,'false');
  assert.equal(elem('nav-backdrop').hidden,true);
+ // One task-focused workspace is visible at a time; no counters or wallets reset.
+ assert.equal(elem('workspace-overview').hidden,false);
+ assert.equal(elem('overview').hidden,false);
+ for(const page of ['finance','providers-section','manage','expenses','settings-section'])
+  assert.equal(elem(page).hidden,true);
+ vm.runInContext("activateWorkspace('#providers-section')",ctx);
+ assert.equal(elem('providers-section').hidden,false);
+ assert.equal(elem('overview').hidden,false);
+ assert.equal(elem('workspace-overview').hidden,true);
+ assert.equal(elem('finance').hidden,true);
+ vm.runInContext("activateWorkspace('#finance')",ctx);
+ assert.equal(elem('finance').hidden,false);
+ assert.equal(elem('overview').hidden,true);
+ assert.equal(elem('providers-section').hidden,true);
+ vm.runInContext("activateWorkspace('#settings-section')",ctx);
+ assert.equal(elem('settings-section').hidden,false);
+ assert.equal(elem('manage').hidden,true);
+ vm.runInContext("activateWorkspace('#not-a-page')",ctx);
+ assert.equal(elem('workspace-overview').hidden,false);
 
  const n=vm.runInContext('chartColors.length',ctx);
  const unique=vm.runInContext('new Set(chartColors).size',ctx);
