@@ -279,6 +279,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({'error':str(exc)},400)
         if path=='/api/export.csv':return self.export_csv(parse_qs(urlsplit(self.path).query))
         if path=='/api/expenses.csv':return self.export_expenses_csv(parse_qs(urlsplit(self.path).query))
+        if path=='/api/wallet-reconciliations.csv':return self.export_wallet_reconciliations_csv()
         return self.send_json({'error':'یافت نشد'},404)
 
     def redirect(self,where,extra=None):
@@ -528,6 +529,51 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError,KeyError,TypeError,OverflowError) as e:
                 return self.send_json({'error':str(e)},400)
         return self.send_json({'error':'یافت نشد'},404)
+
+    def export_wallet_reconciliations_csv(self):
+        """One-click, read-only audit of all corrections including cancellations.
+
+        Keep native integer units: Rial for money and bytes for volume, with
+        an additional human-readable column for the installation's GB/GiB.
+        Never silently convert signed accounting adjustments into credits.
+        """
+        out=StringIO()
+        w=csv.writer(out)
+        w.writerow(['ارائه‌دهنده','نام حساب','نوع حساب','شناسه همسان‌سازی','زمان UTC',
+                    'مانده محاسبه‌شده قبل (ریال/بایت)',
+                    'مانده اعلامی (ریال/بایت)',
+                    'اختلاف (ریال/بایت)',
+                    'واحد مقدار خام','اختلاف نمایش‌شده','توضیح',
+                    'وضعیت','زمان لغو UTC','دلیل لغو'])
+        def safe_cell(value):
+            value=str(value if value is not None else '')
+            # Strings beginning with spreadsheet expression prefixes are data,
+            # never executable spreadsheet formulas in exported attachments.
+            return "'"+value if value.lstrip().startswith(('=','+','-','@')) or value.startswith(('\\t','\\r')) else value
+        with connect(Path(CFG['data_dir'])/'traffic.sqlite3') as db:
+            divisor=selected_bytes_per_unit(db)
+            volume_label=selected_unit(db)
+            rows=db.execute("""
+                SELECT COALESCE(l.provider,''),a.title,a.kind,
+                       r.id,r.checked_at,r.estimated_before,r.reported_amount,
+                       r.adjustment,r.note,v.voided_at,v.reason
+                FROM supplier_reconciliations r
+                JOIN supplier_accounts a ON a.id=r.account_id
+                LEFT JOIN provider_wallet_links l ON l.account_id=a.id
+                LEFT JOIN supplier_reconciliation_voids v ON v.reconciliation_id=r.id
+                ORDER BY r.checked_at DESC,r.id DESC
+            """)
+            for provider,title,kind,rid,checked,before,reported,adjustment,note,voided,reason in rows:
+                monetary=kind=='money'
+                label='ریال' if monetary else 'بایت'
+                shown=('%+.3f %s'%(adjustment/divisor,volume_label)
+                    if not monetary else '%+d ریال'%adjustment)
+                w.writerow([safe_cell(provider),safe_cell(title),kind,rid,checked,before,reported,
+                            adjustment,label,shown,safe_cell(note),
+                            'لغوشده' if voided else 'فعال',voided or '',safe_cell(reason)])
+        return self.send_bytes(('\\ufeff'+out.getvalue()).encode('utf-8'),
+            ctype='text/csv; charset=utf-8',
+            extra={'Content-Disposition':'attachment; filename="pgtraffic-wallet-reconciliations.csv"'})
 
     def export_expenses_csv(self,params):
         try:
