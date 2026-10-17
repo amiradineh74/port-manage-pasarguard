@@ -571,12 +571,16 @@ function openWalletDialog(type,id){
   $('wallet-reported-dialog').showModal();
  }
 }
-async function saveWalletRequest(event,url,read,dialog){
+async function saveWalletRequest(event,url,read,dialog,afterSuccess=null){
  event.preventDefault();
  const button=event.currentTarget.querySelector('button[type=submit]');
  button.disabled=true;
- try{await sendUpdate(url,read());$(dialog).close();await reload();}
- catch(err){alert(err.message);}finally{button.disabled=false;}
+ try{
+  const payload=read();
+  await sendUpdate(url,payload);
+  if(afterSuccess)afterSuccess(payload);
+  $(dialog).close();await reload();
+ }catch(err){alert(err.message);}finally{button.disabled=false;}
 }
 function installWalletForms(){
  $('provider-rename-cancel').addEventListener('click',()=>$('provider-rename-dialog').close());
@@ -588,10 +592,11 @@ function installWalletForms(){
    if(!new_provider||new_provider===old_provider)throw Error('نام جدید باید با نام فعلی متفاوت باشد');
    if(!confirm('نام ارائه‌دهنده «'+old_provider+'» در کل مانیتور به «'+new_provider+
      '» تغییر کند؟\\nتاریخچه مالی، مانده و پورت‌های واقعی تغییر نمی‌کنند.'))throw Error('اصلاح نام لغو شد');
+   return {old_provider,new_provider};
+  },'provider-rename-dialog',({old_provider,new_provider})=>{
    if(selectedProvider===old_provider)selectedProvider=new_provider;
    if(expandedProviderAccounts.delete(old_provider))expandedProviderAccounts.add(new_provider);
-   return {old_provider,new_provider};
-  },'provider-rename-dialog'));
+  }));
  $('wallet-identity-form').addEventListener('submit',e=>saveWalletRequest(
   e,'/api/wallets/edit',()=>{
    const a=walletById($('wallet-identity-id').value);
