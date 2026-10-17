@@ -202,7 +202,7 @@ class WebTests(unittest.TestCase):
             self.assertEqual(status,200)
             self.assertIn('text/csv',headers['Content-Type'])
             self.assertIn('attachment;',headers['Content-Disposition'])
-            self.assertTrue(body.startswith(b'\\xef\\xbb\\xbf'))
+            self.assertTrue(body.startswith(bytes((0xef,0xbb,0xbf))))
             rows=list(csv.reader(StringIO(body.decode('utf-8-sig'))))
             matches=[row for row in rows[1:] if row[3]==str(rid)]
             self.assertEqual(len(matches),1)
