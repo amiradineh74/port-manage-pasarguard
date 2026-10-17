@@ -31,6 +31,7 @@ assert.ok(dashboardTemplate.includes('class="expense-formula"'));
 assert.ok(dashboardTemplate.includes('class="workspace-hero"'));
 assert.ok(dashboardTemplate.includes('id="reconciliation-overview"'));
 assert.ok(dashboardTemplate.includes('class="finance-report-details"'));
+assert.ok(dashboardTemplate.includes('id="wallet-advanced-operation"'));
 assert.ok(dashboardTemplate.includes('class="analysis-disclosure provider-trends"'));
 assert.ok(dashboardTemplate.includes('class="panel workspace-view" id="settings-section"'));
 assert.ok(dashboardTemplate.includes('id="manage"') && !dashboardTemplate.includes('<div class="prefs" id="settings-section"'));
@@ -134,6 +135,10 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../app/dashboard.js'),'utf8
  assert.ok(elem('providers').innerHTML.includes('first'));
  assert.ok(elem('providers').innerHTML.includes('گزارش پورت‌ها'));
  assert.ok(elem('providers').innerHTML.includes('provider-quick-create'));
+ vm.runInContext("openProviderWallet('A')",ctx);
+ assert.equal(elem('wallet-advanced-operation').open,false);
+ vm.runInContext("openProviderWallet('A',11)",ctx);
+ assert.equal(elem('wallet-advanced-operation').open,true);
  assert.ok(elem('reconciliation-overview').innerHTML.includes('آخرین مغایرت‌های ثبت‌شده'));
  assert.ok(elem('reconciliation-overview').innerHTML.includes('مشاهده حساب'));
 
