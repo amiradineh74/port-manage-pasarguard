@@ -716,6 +716,8 @@ body dialog h2{padding-bottom:8px;border-bottom:1px solid var(--line)}
 .reconciliation-header h3{font-size:15px;margin:0 0 7px}
 .reconciliation-header p{font-size:11px;color:var(--muted);line-height:2;max-width:72ch;margin:0}
 .reconciliation-header p b{color:var(--text)}
+.audit-actions{display:flex;flex-wrap:wrap;align-items:center;gap:9px}
+.audit-actions .linkbutton{display:inline-flex;align-items:center;justify-content:center;font-size:11px;min-height:37px;padding:8px 11px}
 .audit-summary{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:8px 12px;
  font-size:11px;color:var(--muted);white-space:nowrap}
 .audit-table{min-width:790px;width:100%;border-collapse:collapse}
